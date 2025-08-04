@@ -26,6 +26,10 @@ def _reduce_noise(audio_data, sample_rate):
 
 #음성 인식 (STT) -> 텍스트 변환
 def _speech_to_text(audio_file_path):
+    #속도 측정 시작
+    print("Model inference start...")
+    inference_start_time = datetime.datetime.now()
+    
     print(f"\nSTT 시작 (Whisper API): '{audio_file_path}'")
     try:
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -38,6 +42,10 @@ def _speech_to_text(audio_file_path):
                 response_format="text",
                 prompt=hints  
             )
+        #속도 측정 끝
+        end_inference_time = datetime.datetime.now()
+        print(f"Model inference time: {(end_inference_time - inference_start_time).total_seconds():.2f} seconds")
+        
         transcription = transcript.strip() if transcript else ""
         print(f"STT 결과: {transcription}")
         return transcription
@@ -69,6 +77,10 @@ def _create_diff_detail(expected_char, actual_char):
 
 # 이 함수 전체를 아래 내용으로 교체해 주세요.
 def _evaluate_pronunciation_with_llm(llm_input_pairs):
+    #속도측정 시작
+    llm_start_time = datetime.datetime.now()
+    print("LLM API call start...")
+    
     if not llm_input_pairs:
         return {"incorrect_points": []}
     
@@ -91,6 +103,10 @@ def _evaluate_pronunciation_with_llm(llm_input_pairs):
         """
         user_prompt = f"다음은 분석 요청 목록입니다. 이 목록을 바탕으로 위 지시에 따라 JSON을 생성해주세요: {json.dumps(llm_input_pairs, ensure_ascii=False)}"
         response = client.chat.completions.create(model="gpt-4o-mini", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
+        # 속도 측정 끝
+        llm_end_time = datetime.datetime.now()
+        print(f"LLM API call time: {(llm_end_time - llm_start_time).total_seconds():.2f} seconds")
+        
         evaluation_result = json.loads(response.choices[0].message.content)
         
         print("LLM 피드백 생성 완료! 응답 데이터:", evaluation_result)

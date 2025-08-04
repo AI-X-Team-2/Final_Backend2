@@ -26,6 +26,10 @@ def _reduce_noise(audio_data, sample_rate):
 
 #음성 인식 (STT) -> 텍스트 변환
 def _speech_to_text(audio_file_path):
+    #속도 측정 시작
+    print("Model inference start...")
+    inference_start_time = datetime.datetime.now()
+    
     print(f"\nSTT 시작 (Whisper API): '{audio_file_path}'")
     try:
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -38,6 +42,10 @@ def _speech_to_text(audio_file_path):
                 response_format="text",
                 prompt=hints  
             )
+        #속도 측정 끝
+        end_inference_time = datetime.datetime.now()
+        print(f"Model inference time: {(end_inference_time - inference_start_time).total_seconds():.2f} seconds")
+        
         transcription = transcript.strip() if transcript else ""
         print(f"STT 결과: {transcription}")
         return transcription
@@ -65,34 +73,29 @@ def _create_diff_detail(expected_char, actual_char):
 #AI 피드백 생성 (LLM-based)
 #앞 단계에서 코드가 정확하게 계산한 '교정 포인트'를 AI에게 전달하면서, 
 #"이 교정 포인트를 바탕으로 입 모양, 혀 위치, 호흡법에 대한 설명만 자연스럽게 만들어줘" 라고 요청합니다.
-def _evaluate_pronunciation_with_llm(target_sentence, user_transcript, pronunciation_pairs, llm_input_pairs):
+# services/analysis_service.py
+
+# 이 함수 전체를 아래 내용으로 교체해 주세요.
+def _evaluate_pronunciation_with_llm(llm_input_pairs):
+    #속도측정 시작
+    llm_start_time = datetime.datetime.now()
+    print("LLM API call start...")
+    
     if not llm_input_pairs:
-        final_points = []
-        for p in pronunciation_pairs:
-            if p.get("is_missing"):
-                final_points.append({"expected": p["expected"], "actual": "", "diff_detail": "누락된 단어", "mouth_shape": "", "tongue_shape": "", "breathing": ""})
-            elif p.get("is_added"):
-                final_points.append({"expected": "", "actual": p["actual"], "diff_detail": "추가된 단어", "mouth_shape": "", "tongue_shape": "", "breathing": ""})
-        correct_count = len(target_sentence) - len(final_points)
-        score = max(0, int((correct_count / len(target_sentence)) * 100)) if len(target_sentence) > 0 else 0
-        return {"score": str(score), "incorrect_points": final_points}
+        return {"incorrect_points": []}
     
     try:
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        # AI의 역할을 '피드백 설명 생성'으로 한정합니다.
         system_prompt = f"""
         당신은 한국어 발음 교정을 전문으로 하는 언어 치료사입니다.
-        '목표 발음'과 '사용자 발음', 그리고 **정확하게 분석된 '교정 포인트'**를 바탕으로, 'expected' 글자를 올바르게 발음하기 위한 '입 모양', '혀 위치', '호흡법' 피드백을 쉽고 구체적으로 생성합니다.
-        '교정 포인트'는 이미 정확하므로, 당신이 이를 다시 계산하거나 수정해서는 안 됩니다.
-        # 분석 대상 정보
-        - 전체 목표 발음: "{target_sentence}"
-        - 전체 사용자 발음: "{user_transcript}"
+        아래 '분석 요청 목록'에 있는 각 쌍에 대해, 'expected' 글자를 올바르게 발음하기 위한 '입 모양', '혀 위치', '호흡법' 피드백을 쉽고 구체적으로 생성합니다.
+        'diff_detail'은 이미 분석된 정확한 정보이므로, 내용을 수정하지 말고 피드백 생성에 참고만 하세요.
+
         # 출력 지침
-        1. 아래 '분석 요청 목록'에 있는 각 JSON 객체에 대해 피드백을 생성합니다.
-        2. 각 쌍에 대해 'mouth_shape', 'tongue_shape', 'breathing' 피드백만 생성합니다.
-        3. 전체적인 발음 정확도를 0에서 100 사이의 점수로 평가합니다.
-        4. 반드시 아래의 JSON 형식으로만 응답해야 합니다.
+        1. 반드시 아래의 JSON 형식으로만 응답해야 합니다.
+        2. 점수(score)는 절대 응답에 포함하지 마세요.
         {{
-          "score": "0에서 100 사이의 정수 점수 (문자열 형태)",
           "incorrect_points": [
             {{ "expected": "목표 글자", "actual": "사용자가 발음한 글자", "diff_detail": "주어진 교정 포인트 그대로", "mouth_shape": "생성된 입 모양 피드백", "tongue_shape": "생성된 혀 위치 피드백", "breathing": "생성된 호흡법 피드백" }}
           ]
@@ -100,26 +103,25 @@ def _evaluate_pronunciation_with_llm(target_sentence, user_transcript, pronuncia
         """
         user_prompt = f"다음은 분석 요청 목록입니다. 이 목록을 바탕으로 위 지시에 따라 JSON을 생성해주세요: {json.dumps(llm_input_pairs, ensure_ascii=False)}"
         response = client.chat.completions.create(model="gpt-4o-mini", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
-        evaluation_result = json.loads(response.choices[0].message.content)
-
-        for p in pronunciation_pairs:
-            if p.get("is_missing"):
-                evaluation_result["incorrect_points"].append({"expected": p["expected"], "actual": "", "diff_detail": "누락된 단어", "mouth_shape": "", "tongue_shape": "", "breathing": ""})
-            elif p.get("is_added"):
-                evaluation_result["incorrect_points"].append({"expected": "", "actual": p["actual"], "diff_detail": "추가된 단어", "mouth_shape": "", "tongue_shape": "", "breathing": ""})
+        # 속도 측정 끝
+        llm_end_time = datetime.datetime.now()
+        print(f"LLM API call time: {(llm_end_time - llm_start_time).total_seconds():.2f} seconds")
         
-        print("LLM 평가 완료! 응답 데이터:", evaluation_result)
+        evaluation_result = json.loads(response.choices[0].message.content)
+        
+        print("LLM 피드백 생성 완료! 응답 데이터:", evaluation_result)
         return evaluation_result
     except Exception as e:
         print(f"LLM 평가 중 심각한 오류 발생: {e}")
-        return {"score": "0", "incorrect_points": []}
+        return {"incorrect_points": []}
 
 # 최종 데이터 종합 및 정리
 #AI로부터 받은 결과에 틀린 글자별 이미지 파일 경로(img)를 추가함.
 #최종적으로 점수, 텍스트, 피드백 목록을 하나의 response_data로 묶음.
 #마지막으로 사용했던 임시 오디오 파일을 삭제하여 서버를 깨끗하게 유지함.
+# services/analysis_service.py
 async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFile):
-    #오디오 전처리
+    # --- 오디오 처리, 텍스트 변환 등 함수 앞부분은 기존과 동일 ---
     audio_content = await audio_file.read()
     audio_stream = io.BytesIO(audio_content)
     audio = AudioSegment.from_file(audio_stream)
@@ -128,65 +130,125 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFil
     wav_stream.seek(0)
     audio_data, sample_rate = sf.read(wav_stream)
     clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
-    
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     clean_audio_path = os.path.join(TEMP_DIR, f"practice_cleaned_{timestamp}.wav")
     sf.write(clean_audio_path, clean_audio_data, sample_rate)
 
-    #텍스트 변환 (음성 인식)
     user_transcript = _speech_to_text(clean_audio_path)
     if not user_transcript: user_transcript = ""
 
-    #1차 검수 (글자 비교)
     normalized_target = target_sentence.strip()
     normalized_user = user_transcript.strip()
     
-    if normalized_target == normalized_user:
+    if normalized_target == user_transcript:
+        if os.path.exists(clean_audio_path):
+            os.remove(clean_audio_path)
         return {"score": "100", "transcription": user_transcript, "incorrect_points": []}
 
-    pronunciation_pairs = []
-    min_len = min(len(normalized_target), len(normalized_user))
-    for i in range(min_len):
-        if normalized_target[i] != normalized_user[i]:
-            pronunciation_pairs.append({"expected": normalized_target[i], "actual": normalized_user[i]})
-    if len(normalized_target) > len(normalized_user):
-        for i in range(min_len, len(normalized_target)):
-            pronunciation_pairs.append({"expected": normalized_target[i], "actual": "", "is_missing": True})
-    elif len(normalized_user) > len(normalized_target):
-        for i in range(min_len, len(normalized_user)):
-            pronunciation_pairs.append({"expected": "", "actual": normalized_user[i], "is_added": True})
+    # [100점 처리] 완벽하게 일치하면 피드백 없이 즉시 반환
+    if normalized_target == user_transcript:
+        if os.path.exists(clean_audio_path):
+            os.remove(clean_audio_path)
+        return {"score": "100", "transcription": user_transcript, "incorrect_points": []}
 
-    #2차 정밀 분석 (코드 기반 교정 포인트 생성)
-    for pair in pronunciation_pairs:
-        if not pair.get("is_missing") and not pair.get("is_added"):
-            pair["diff_detail"] = _create_diff_detail(pair["expected"], pair["actual"])
-
-    llm_input_pairs = [p for p in pronunciation_pairs if not p.get("is_missing") and not p.get("is_added")]
-
-    #3차 심층 분석 (AI 기반 피드백 생성)
-    llm_analysis = _evaluate_pronunciation_with_llm(normalized_target, normalized_user, pronunciation_pairs, llm_input_pairs)
-
+    # --- [수정된 부분 시작] ---
+    # 점수 계산 로직 전체를 명확하게 변경합니다.
+    total_score = 0
+    max_score = len(normalized_target) * 3
     processed_incorrect_points = []
-    if "incorrect_points" in llm_analysis:
-        for point in llm_analysis["incorrect_points"]:
-            expected_char = point.get("expected")
-            img_filename = "default.png"
-            if expected_char:
-                if expected_char in IMAGE_GUIDE_MAP:
-                    img_filename = IMAGE_GUIDE_MAP[expected_char]
-                elif '가' <= expected_char <= '힣':
-                    chosung, jungsung, _ = decompose_hangul(expected_char)
-                    img_filename = IMAGE_GUIDE_MAP.get(chosung, IMAGE_GUIDE_MAP.get(jungsung, "default.png"))
-            point_with_img = {**point, "img": img_filename}
-            processed_incorrect_points.append(point_with_img)
+    
+    # 단어 전체에 의미 있는 유사성이 하나라도 있는지 추적하는 플래그
+    is_any_meaningful_similarity_found = False
+
+    # 2차 정밀 분석 (코드 기반 교정 포인트 및 점수 생성)
+    for i in range(len(normalized_target)):
+        expected_char = normalized_target[i]
+        actual_char = normalized_user[i] if i < len(normalized_user) else ""
+        
+        # 글자가 완벽히 같으면 3점 부여
+        if expected_char == actual_char:
+            total_score += 3
+            is_any_meaningful_similarity_found = True
+            continue
+
+        # 글자가 다를 경우, 자모를 분해하여 부분 점수 계산
+        e_cho, e_jung, e_jong = decompose_hangul(expected_char)
+        a_cho, a_jung, a_jong = decompose_hangul(actual_char)
+        
+        char_score = 0
+        
+        # 초성, 중성, 또는 내용이 있는 종성이 일치하는지 확인
+        if e_cho == a_cho:
+            char_score += 1
+            is_any_meaningful_similarity_found = True
+        if e_jung == a_jung:
+            char_score += 1
+            is_any_meaningful_similarity_found = True
+        if e_jong and e_jong == a_jong: # 비어있지 않은 종성이 일치
+            char_score += 1
+            is_any_meaningful_similarity_found = True
+        
+        total_score += char_score
+        processed_incorrect_points.append({
+            "expected": expected_char,
+            "actual": actual_char,
+            "diff_detail": _create_diff_detail(expected_char, actual_char)
+        })
+
+    # 사용자가 더 길게 발음한 경우 (추가된 단어 처리)
+    if len(normalized_user) > len(normalized_target):
+        for i in range(len(normalized_target), len(normalized_user)):
+            processed_incorrect_points.append({
+                "expected": "", "actual": normalized_user[i], "diff_detail": "추가된 단어"
+            })
+
+    # 최종 점수 계산
+    # 만약 단어 전체에서 유의미한 유사성(자모 일치)이 전혀 없었다면 0점 처리
+    if not is_any_meaningful_similarity_found and len(normalized_user) >= len(normalized_target):
+        final_score = 0
+    else:
+        final_score = int((total_score / max_score) * 100) if max_score > 0 else 0
+    # --- [수정된 부분 끝] ---
+
+    # --- [수정된 부분 시작] ---
+    # 3차 심층 분석 (AI 피드백 설명 생성)
+    # 점수가 1~99점일 때만 AI를 호출하여 상세 설명을 생성합니다.
+    if 0 < final_score < 100:
+        llm_input_pairs = [p for p in processed_incorrect_points if p.get("diff_detail") not in ["누락된 단어", "추가된 단어"]]
+        if llm_input_pairs:
+            llm_analysis = _evaluate_pronunciation_with_llm(llm_input_pairs)
             
-    #최종 포장 및 출하 (결과 종합)
+            llm_feedback_map = {(p['expected'], p['actual']): p for p in llm_analysis.get('incorrect_points', [])}
+            for point in processed_incorrect_points:
+                feedback = llm_feedback_map.get((point['expected'], point['actual']))
+                if feedback:
+                    point.update({
+                        "mouth_shape": feedback.get("mouth_shape", ""),
+                        "tongue_shape": feedback.get("tongue_shape", ""),
+                        "breathing": feedback.get("breathing", ""),
+                    })
+    # --- [수정된 부분 끝] ---
+
+    # 이미지 파일명 추가
+    for point in processed_incorrect_points:
+        expected_char = point.get("expected")
+        img_filename = "default.png"
+        if expected_char:
+            if expected_char in IMAGE_GUIDE_MAP:
+                img_filename = IMAGE_GUIDE_MAP[expected_char]
+            elif '가' <= expected_char <= '힣':
+                chosung, jungsung, _ = decompose_hangul(expected_char)
+                img_filename = IMAGE_GUIDE_MAP.get(chosung, IMAGE_GUIDE_MAP.get(jungsung, "default.png"))
+        point["img"] = img_filename
+            
+    # 최종 결과 반환
     response_data = {
-        "score": llm_analysis.get("score", "0"),
+        "score": str(final_score),
         "transcription": user_transcript,
         "incorrect_points": processed_incorrect_points
     }
-    #임시 오디오 파일 삭제
+    
     if os.path.exists(clean_audio_path):
         os.remove(clean_audio_path)
 

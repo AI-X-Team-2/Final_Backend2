@@ -1,7 +1,7 @@
 # models/pronunciation.py
 # Pydantic 라이브러리를 사용해 API가 주고받을 데이터의 형식(Schema)을 정의하는 부분
 
-#틀린 글자 한 개'에 대한 상세 피드백 정보의 설계도
+#틀린 글자 한 개에 대한 상세 피드백 정보의 설계도
 from pydantic import BaseModel
 from typing import List
 

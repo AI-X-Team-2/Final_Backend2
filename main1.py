@@ -24,4 +24,5 @@ app.add_middleware(
 app.mount("/static/images", StaticFiles(directory="static/images"), name="static_images")
 
 # 라우터 포함
+#routes/pronunciation.py 파일에 정의된 모든 API 경로들(/, /analyze 등)을 메인 app에 연결하여 실제로 동작하도록 "플러그인"처럼 장착함
 app.include_router(pronunciation.router)

@@ -1,62 +1,77 @@
 # services/analysis_service.py
-#사용자로부터 받은 음성 파일을 분석하고 최종 피드백을 생성하기까지의 모든 복잡한 실제 작업이 이 파일 안에서 순서대로 이루어짐
+# 음성 파일 처리, STT, LLM 평가 등 핵심 비즈니스 로직을 담고 있습니다.
+
 import os
 import numpy as np
 import noisereduce as nr
 import datetime
 import json
 import io
-from openai import OpenAI
 import soundfile as sf
 from pydub import AudioSegment
-from fastapi import UploadFile
+from openai import OpenAI
+from dotenv import load_dotenv
 
+import torch
+from faster_whisper import WhisperModel
+
+from fastapi import HTTPException
+
+# 다른 파일에서 필요한 함수, 설정, 모델들을 임포트합니다.
 from utils.hangul import decompose_hangul
 from core.config import IMAGE_GUIDE_MAP
+# from models.pronunciation import IncorrectPoint, PronunciationAnalysisResponse
 
-TEMP_DIR = "temp_files"
-os.makedirs(TEMP_DIR, exist_ok=True)
 
-#오디오 처리
+# .env 파일에서 환경 변수를 로드합니다.
+load_dotenv()
+
+
+# === 모델 로드 및 설정 ===
+MODEL_SIZE = "medium"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+compute_type = "float16" if torch.cuda.is_available() else "default"
+
+print(f"Faster Whisper 모델 로드를 시작합니다. 모델 크기: '{MODEL_SIZE}', 장치: {device}, 계산 타입: {compute_type}")
+whisper_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
+print("Faster Whisper 모델 로드 완료!")
+
+
+# --- 폴더 분리 및 생성 ---
+# 음성 파일 저장 폴더를 정의하고 생성합니다.
+PRONUNCIATION_AUDIO_DIR = "pronunciation_audio_files"
+MINIGAME_AUDIO_DIR = "minigame_audio_files"
+os.makedirs(PRONUNCIATION_AUDIO_DIR, exist_ok=True)
+os.makedirs(MINIGAME_AUDIO_DIR, exist_ok=True)
+
+
 def _reduce_noise(audio_data, sample_rate):
+    """오디오 데이터의 노이즈를 제거합니다."""
     print("... 오디오 노이즈 제거를 시작합니다 ...")
     reduced_noise_audio = nr.reduce_noise(y=audio_data, sr=sample_rate, stationary=False, prop_decrease=0.8)
     print("노이즈 제거 완료!")
     return reduced_noise_audio
 
-#음성 인식 (STT) -> 텍스트 변환
-def _speech_to_text(audio_file_path):
-    #속도 측정 시작
-    print("Model inference start...")
-    inference_start_time = datetime.datetime.now()
-    
-    print(f"\nSTT 시작 (Whisper API): '{audio_file_path}'")
+
+def _speech_to_text(audio_file_path: str):
+    """지정된 오디오 파일 경로에서 음성 인식(STT)을 수행합니다."""
+    print(f"\nSTT 시작 (faster-whisper): '{audio_file_path}'")
     try:
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        # 겹받침 등 발음이 복잡하여 AI가 헷갈릴 만한 단어들을 추가합니다.
-        hints = "앉다, 안다, 값, 갑, 삶, 삼, 닭, 읊다, 옳다"
-        with open(audio_file_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                response_format="text",
-                prompt=hints  
-            )
-        #속도 측정 끝
-        end_inference_time = datetime.datetime.now()
-        print(f"Model inference time: {(end_inference_time - inference_start_time).total_seconds():.2f} seconds")
-        
-        transcription = transcript.strip() if transcript else ""
+        if not os.path.exists(audio_file_path):
+            print(f"오디오 파일이 존재하지 않습니다: {audio_file_path}")
+            return ""
+
+        segments, _ = whisper_model.transcribe(audio_file_path, language="ko")
+        transcription = "".join(segment.text for segment in segments).strip()
         print(f"STT 결과: {transcription}")
         return transcription
     except Exception as e:
-        print(f"Whisper API 호출 중 오류 발생: {e}")
+        print(f"faster-whisper 모델 처리 중 오류 발생: {e}")
         return ""
 
-# 정확한 오류 분석 (Code-based)
-#_create_diff_detail 함수를 호출하여, 코드가 직접 초성/중성/종성을 분석하고 '추가', 
-#'제외' 등을 포함한 100% 정확한 '교정 포인트' 문자열을 생성합니다.
+
 def _create_diff_detail(expected_char, actual_char):
+    """예상 글자와 실제 발음 글자의 차이를 분석하여 상세 정보를 생성합니다."""
     if not actual_char: return "누락된 단어"
     if not expected_char: return "추가된 단어"
     e_cho, e_jung, e_jong = decompose_hangul(expected_char)
@@ -70,28 +85,16 @@ def _create_diff_detail(expected_char, actual_char):
         else: diffs.append(f"종성: {a_jong} → {e_jong}")
     return ", ".join(diffs)
 
-#AI 피드백 생성 (LLM-based)
-#앞 단계에서 코드가 정확하게 계산한 '교정 포인트'를 AI에게 전달하면서, 
-#"이 교정 포인트를 바탕으로 입 모양, 혀 위치, 호흡법에 대한 설명만 자연스럽게 만들어줘" 라고 요청합니다.
-# services/analysis_service.py
-
-# 이 함수 전체를 아래 내용으로 교체해 주세요.
 def _evaluate_pronunciation_with_llm(llm_input_pairs):
-    #속도측정 시작
-    llm_start_time = datetime.datetime.now()
-    print("LLM API call start...")
-    
+    """LLM을 사용하여 발음 교정 피드백을 생성합니다."""
     if not llm_input_pairs:
         return {"incorrect_points": []}
-    
     try:
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        # AI의 역할을 '피드백 설명 생성'으로 한정합니다.
         system_prompt = f"""
         당신은 한국어 발음 교정을 전문으로 하는 언어 치료사입니다.
         아래 '분석 요청 목록'에 있는 각 쌍에 대해, 'expected' 글자를 올바르게 발음하기 위한 '입 모양', '혀 위치', '호흡법' 피드백을 쉽고 구체적으로 생성합니다.
         'diff_detail'은 이미 분석된 정확한 정보이므로, 내용을 수정하지 말고 피드백 생성에 참고만 하세요.
-
         # 출력 지침
         1. 반드시 아래의 JSON 형식으로만 응답해야 합니다.
         2. 점수(score)는 절대 응답에 포함하지 마세요.
@@ -103,25 +106,17 @@ def _evaluate_pronunciation_with_llm(llm_input_pairs):
         """
         user_prompt = f"다음은 분석 요청 목록입니다. 이 목록을 바탕으로 위 지시에 따라 JSON을 생성해주세요: {json.dumps(llm_input_pairs, ensure_ascii=False)}"
         response = client.chat.completions.create(model="gpt-4o-mini", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
-        # 속도 측정 끝
-        llm_end_time = datetime.datetime.now()
-        print(f"LLM API call time: {(llm_end_time - llm_start_time).total_seconds():.2f} seconds")
-        
         evaluation_result = json.loads(response.choices[0].message.content)
-        
         print("LLM 피드백 생성 완료! 응답 데이터:", evaluation_result)
         return evaluation_result
     except Exception as e:
         print(f"LLM 평가 중 심각한 오류 발생: {e}")
         return {"incorrect_points": []}
 
-# 최종 데이터 종합 및 정리
-#AI로부터 받은 결과에 틀린 글자별 이미지 파일 경로(img)를 추가함.
-#최종적으로 점수, 텍스트, 피드백 목록을 하나의 response_data로 묶음.
-#마지막으로 사용했던 임시 오디오 파일을 삭제하여 서버를 깨끗하게 유지함.
-# services/analysis_service.py
-async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFile):
-    # --- 오디오 처리, 텍스트 변환 등 함수 앞부분은 기존과 동일 ---
+
+# --- 발음 교정 기능 함수 ---
+async def analyze_user_pronunciation(target_sentence: str, audio_file):
+    """사용자 발음을 분석하고 피드백을 반환합니다."""
     audio_content = await audio_file.read()
     audio_stream = io.BytesIO(audio_content)
     audio = AudioSegment.from_file(audio_stream)
@@ -129,66 +124,49 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFil
     audio.set_frame_rate(16000).set_channels(1).export(wav_stream, format="wav")
     wav_stream.seek(0)
     audio_data, sample_rate = sf.read(wav_stream)
+    
     clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    clean_audio_path = os.path.join(TEMP_DIR, f"practice_cleaned_{timestamp}.wav")
-    sf.write(clean_audio_path, clean_audio_data, sample_rate)
+    cleaned_audio_path = os.path.join(PRONUNCIATION_AUDIO_DIR, f"practice_cleaned_{timestamp}.wav")
+    sf.write(cleaned_audio_path, clean_audio_data, sample_rate)
 
-    user_transcript = _speech_to_text(clean_audio_path)
+    user_transcript = _speech_to_text(cleaned_audio_path)
     if not user_transcript: user_transcript = ""
 
     normalized_target = target_sentence.strip()
     normalized_user = user_transcript.strip()
-    
-    if normalized_target == user_transcript:
-        if os.path.exists(clean_audio_path):
-            os.remove(clean_audio_path)
-        return {"score": "100", "transcription": user_transcript, "incorrect_points": []}
 
-    # [100점 처리] 완벽하게 일치하면 피드백 없이 즉시 반환
-    if normalized_target == user_transcript:
-        if os.path.exists(clean_audio_path):
-            os.remove(clean_audio_path)
-        return {"score": "100", "transcription": user_transcript, "incorrect_points": []}
+    if normalized_target == normalized_user:
+        return {"score": "100", "transcription": normalized_user, "incorrect_points": []}
 
-    # --- [수정된 부분 시작] ---
-    # 점수 계산 로직 전체를 명확하게 변경합니다.
     total_score = 0
     max_score = len(normalized_target) * 3
     processed_incorrect_points = []
-    
-    # 단어 전체에 의미 있는 유사성이 하나라도 있는지 추적하는 플래그
     is_any_meaningful_similarity_found = False
 
-    # 2차 정밀 분석 (코드 기반 교정 포인트 및 점수 생성)
     for i in range(len(normalized_target)):
         expected_char = normalized_target[i]
         actual_char = normalized_user[i] if i < len(normalized_user) else ""
-        
-        # 글자가 완벽히 같으면 3점 부여
+
         if expected_char == actual_char:
             total_score += 3
             is_any_meaningful_similarity_found = True
             continue
 
-        # 글자가 다를 경우, 자모를 분해하여 부분 점수 계산
         e_cho, e_jung, e_jong = decompose_hangul(expected_char)
         a_cho, a_jung, a_jong = decompose_hangul(actual_char)
-        
         char_score = 0
-        
-        # 초성, 중성, 또는 내용이 있는 종성이 일치하는지 확인
         if e_cho == a_cho:
             char_score += 1
             is_any_meaningful_similarity_found = True
         if e_jung == a_jung:
             char_score += 1
             is_any_meaningful_similarity_found = True
-        if e_jong and e_jong == a_jong: # 비어있지 않은 종성이 일치
+        if e_jong and e_jong == a_jong:
             char_score += 1
             is_any_meaningful_similarity_found = True
-        
+
         total_score += char_score
         processed_incorrect_points.append({
             "expected": expected_char,
@@ -196,29 +174,21 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFil
             "diff_detail": _create_diff_detail(expected_char, actual_char)
         })
 
-    # 사용자가 더 길게 발음한 경우 (추가된 단어 처리)
     if len(normalized_user) > len(normalized_target):
         for i in range(len(normalized_target), len(normalized_user)):
             processed_incorrect_points.append({
                 "expected": "", "actual": normalized_user[i], "diff_detail": "추가된 단어"
             })
 
-    # 최종 점수 계산
-    # 만약 단어 전체에서 유의미한 유사성(자모 일치)이 전혀 없었다면 0점 처리
     if not is_any_meaningful_similarity_found and len(normalized_user) >= len(normalized_target):
         final_score = 0
     else:
         final_score = int((total_score / max_score) * 100) if max_score > 0 else 0
-    # --- [수정된 부분 끝] ---
 
-    # --- [수정된 부분 시작] ---
-    # 3차 심층 분석 (AI 피드백 설명 생성)
-    # 점수가 1~99점일 때만 AI를 호출하여 상세 설명을 생성합니다.
     if 0 < final_score < 100:
         llm_input_pairs = [p for p in processed_incorrect_points if p.get("diff_detail") not in ["누락된 단어", "추가된 단어"]]
         if llm_input_pairs:
             llm_analysis = _evaluate_pronunciation_with_llm(llm_input_pairs)
-            
             llm_feedback_map = {(p['expected'], p['actual']): p for p in llm_analysis.get('incorrect_points', [])}
             for point in processed_incorrect_points:
                 feedback = llm_feedback_map.get((point['expected'], point['actual']))
@@ -228,10 +198,10 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFil
                         "tongue_shape": feedback.get("tongue_shape", ""),
                         "breathing": feedback.get("breathing", ""),
                     })
-    # --- [수정된 부분 끝] ---
 
-    # 이미지 파일명 추가
     for point in processed_incorrect_points:
+        if "mouth_shape" not in point:
+            point.update({"mouth_shape": "", "tongue_shape": "", "breathing": ""})
         expected_char = point.get("expected")
         img_filename = "default.png"
         if expected_char:
@@ -241,15 +211,42 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file: UploadFil
                 chosung, jungsung, _ = decompose_hangul(expected_char)
                 img_filename = IMAGE_GUIDE_MAP.get(chosung, IMAGE_GUIDE_MAP.get(jungsung, "default.png"))
         point["img"] = img_filename
-            
-    # 최종 결과 반환
+
     response_data = {
         "score": str(final_score),
-        "transcription": user_transcript,
+        "transcription": normalized_user,
         "incorrect_points": processed_incorrect_points
     }
     
-    if os.path.exists(clean_audio_path):
-        os.remove(clean_audio_path)
+    if not os.path.exists(cleaned_audio_path):
+        print(f"경고: 노이즈 제거된 오디오 파일이 이미 삭제되었거나 존재하지 않습니다: {cleaned_audio_path}")
 
     return response_data
+
+
+# --- 미니게임 기능 함수 ---
+async def transcribe_audio_for_minigame(audio):
+    """
+    오디오 파일을 받아 텍스트로 변환하는 간단한 STT 기능입니다.
+    미니게임 등 실시간 텍스트 변환이 필요할 때 사용합니다.
+    """
+    if not audio:
+        raise HTTPException(status_code=400, detail="오디오 파일이 없습니다.")
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    temp_filepath = os.path.join(MINIGAME_AUDIO_DIR, f"minigame_audio_{timestamp}.wav")
+
+    try:
+        with open(temp_filepath, "wb") as f:
+            content = await audio.read()
+            f.write(content)
+        print(f"미니게임용 오디오 저장 완료: {temp_filepath}")
+
+        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko")
+        transcription = "".join(segment.text for segment in segments).strip()
+        print(f"미니게임 STT 결과: {transcription}")
+        return {"transcription": transcription}
+
+    except Exception as e:
+        print(f"미니게임 STT 처리 중 오류 발생: {e}")
+        raise HTTPException(status_code=500, detail=f"오디오 처리 중 서버 오류 발생: {str(e)}")

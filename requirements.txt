@@ -1,10 +1,20 @@
+# Web Framework
 fastapi
 uvicorn[standard]
-python-dotenv
+python-multipart
+
+# AI & Machine Learning
+#pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+transformers
+sentencepiece
+accelerate
 openai
-pydub
+faster-whisper
+# Audio Processing
 numpy
+pydub
 soundfile
 noisereduce
-scipy
-python-multipart
+
+# Utilities
+python-dotenv

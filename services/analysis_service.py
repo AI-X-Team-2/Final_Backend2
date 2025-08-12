@@ -8,8 +8,10 @@ import datetime
 import json
 import io
 import soundfile as sf
+import requests  # Ollama 연동을 위해 추가
+import time  # 시간 측정을 위해 추가
 from pydub import AudioSegment
-from openai import OpenAI
+# from openai import OpenAI # Ollama를 사용하므로 더 이상 필요하지 않습니다.
 from dotenv import load_dotenv
 
 import torch
@@ -60,9 +62,17 @@ def _speech_to_text(audio_file_path: str):
         if not os.path.exists(audio_file_path):
             print(f"오디오 파일이 존재하지 않습니다: {audio_file_path}")
             return ""
+        
+        # --- 시간 측정 시작 ---
+        stt_start_time = time.time()
 
         segments, _ = whisper_model.transcribe(audio_file_path, language="ko")
         transcription = "".join(segment.text for segment in segments).strip()
+        
+        # --- 시간 측정 종료 및 출력 ---
+        stt_end_time = time.time()
+        print(f"STT 처리 완료! (소요 시간: {stt_end_time - stt_start_time:.2f}초)")
+        
         print(f"STT 결과: {transcription}")
         return transcription
     except Exception as e:
@@ -85,34 +95,74 @@ def _create_diff_detail(expected_char, actual_char):
         else: diffs.append(f"종성: {a_jong} → {e_jong}")
     return ", ".join(diffs)
 
+# _evaluate_pronunciation_with_llm 함수를 아래 내용으로 교체해 주세요.
+
 def _evaluate_pronunciation_with_llm(llm_input_pairs):
-    """LLM을 사용하여 발음 교정 피드백을 생성합니다."""
+    """LLM(Ollama Qwen2)을 사용하여 발음 교정 피드백을 생성합니다."""
     if not llm_input_pairs:
         return {"incorrect_points": []}
-    try:
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        system_prompt = f"""
-        당신은 한국어 발음 교정을 전문으로 하는 언어 치료사입니다.
-        아래 '분석 요청 목록'에 있는 각 쌍에 대해, 'expected' 글자를 올바르게 발음하기 위한 '입 모양', '혀 위치', '호흡법' 피드백을 쉽고 구체적으로 생성합니다.
-        'diff_detail'은 이미 분석된 정확한 정보이므로, 내용을 수정하지 말고 피드백 생성에 참고만 하세요.
-        # 출력 지침
-        1. 반드시 아래의 JSON 형식으로만 응답해야 합니다.
-        2. 점수(score)는 절대 응답에 포함하지 마세요.
-        {{
-          "incorrect_points": [
-            {{ "expected": "목표 글자", "actual": "사용자가 발음한 글자", "diff_detail": "주어진 교정 포인트 그대로", "mouth_shape": "생성된 입 모양 피드백", "tongue_shape": "생성된 혀 위치 피드백", "breathing": "생성된 호흡법 피드백" }}
-          ]
-        }}
-        """
-        user_prompt = f"다음은 분석 요청 목록입니다. 이 목록을 바탕으로 위 지시에 따라 JSON을 생성해주세요: {json.dumps(llm_input_pairs, ensure_ascii=False)}"
-        response = client.chat.completions.create(model="gpt-4o-mini", response_format={"type": "json_object"}, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
-        evaluation_result = json.loads(response.choices[0].message.content)
-        print("LLM 피드백 생성 완료! 응답 데이터:", evaluation_result)
-        return evaluation_result
-    except Exception as e:
-        print(f"LLM 평가 중 심각한 오류 발생: {e}")
-        return {"incorrect_points": []}
 
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_api_url = f"{ollama_host}/api/chat"
+
+    # === [Qwen2 맞춤형 고급 프롬프트] ===
+    system_prompt = f"""
+# 지시사항
+당신은 음성학 박사입니다.
+주어진 각 항목에 대해 'mouth_shape', 'tongue_shape', 'breathing' 키에 대한 구체적인 한국어 교정 피드백을 짧게 생성하세요.
+
+# 출력 규칙
+- 답변 생성 시, 한글, 일반적인 구두점(.) 외에 다른 언어(특히 한자, 일본어, 영어)의 문자가 절대 포함되어서는 안 됩니다.
+- 반드시 '필수 JSON 출력 형식'에 맞춰 실제 데이터만 담아 응답하세요.
+- JSON 외에 다른 설명은 절대 추가하지 마세요.
+
+
+# 필수 JSON 출력 형식
+{{
+  "incorrect_points": [
+{{ "expected": "목표 글자", "actual": "사용자가 발음한 글자", "diff_detail": "주어진 교정 포인트 그대로", "mouth_feedback": "틀린 글자의 대한 입 모양 피드백", "tongue_position_feedback": "틀린 글자의 대한 혀 위치 피드백", "breathing_feedback": "생성된 호흡법 피드백" }}
+  ]
+}}
+"""
+    # [수정됨] 사용자 프롬프트를 더 직접적인 명령으로 변경
+    user_prompt = f"""
+당신은 음성학 박사입니다. 다음 '분석 요청 목록'의 각 항목에 대해, 당신의 지시사항과 사고 과정에 따라 분석하고, 모범 피드백 예시와 같은 수준으로 피드백을 생성한 후, 
+'필수 JSON 출력 형식'에 맞춰 응답하세요. 분석 요청 목록: {json.dumps(llm_input_pairs, ensure_ascii=False)}
+"""
+
+    payload = {
+    # `ollama create`로 만든 Qwen2 모델의 별명을 사용합니다.
+    "model": "qwen2-7b-instruct-q4_0", 
+    "messages": [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ],
+    "format": "json",
+    "stream": False
+}
+
+    try:
+        print("LLM에 전달하는 데이터:", json.dumps(llm_input_pairs, ensure_ascii=False, indent=2))
+        print(f"Ollama 모델 '{payload['model']}'에 발음 평가 요청을 보냅니다...")
+        llm_start_time = time.time()
+        
+        response = requests.post(ollama_api_url, json=payload, timeout=60)
+        response.raise_for_status()
+        
+        response_data = response.json()
+        message_content = response_data.get('message', {}).get('content', '{}')
+        evaluation_result = json.loads(message_content)
+        
+        llm_end_time = time.time()
+        print(f"Ollama 피드백 생성 완료! (소요 시간: {llm_end_time - llm_start_time:.2f}초)")
+        print("응답 데이터:", evaluation_result)
+        return evaluation_result
+
+    except Exception as e:
+        print(f"LLM(Ollama) 평가 중 심각한 오류 발생: {e}")
+        if 'message_content' in locals():
+            print("LLM 원본 응답:", message_content)
+        return {"incorrect_points": []}
 
 # --- 발음 교정 기능 함수 ---
 async def analyze_user_pronunciation(target_sentence: str, audio_file):
@@ -185,6 +235,10 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file):
     else:
         final_score = int((total_score / max_score) * 100) if max_score > 0 else 0
 
+        # 만약 점수가 100점이지만, 사용자 발음이 목표 단어보다 길다면 100점이 아니도록 조정합니다.
+    if final_score == 100 and len(normalized_user) != len(normalized_target):
+        final_score = 80 # 100점이 아니도록 감점하거나, 원하는 다른 점수로 설정할 수 있습니다.
+    
     if 0 < final_score < 100:
         llm_input_pairs = [p for p in processed_incorrect_points if p.get("diff_detail") not in ["누락된 단어", "추가된 단어"]]
         if llm_input_pairs:
@@ -194,27 +248,51 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file):
                 feedback = llm_feedback_map.get((point['expected'], point['actual']))
                 if feedback:
                     point.update({
-                        "mouth_shape": feedback.get("mouth_shape", ""),
-                        "tongue_shape": feedback.get("tongue_shape", ""),
-                        "breathing": feedback.get("breathing", ""),
+                        "mouth_feedback": feedback.get("mouth_feedback", ""),
+                        "tongue_position_feedback": feedback.get("tongue_position_feedback", ""),
+                        "breathing_feedback": feedback.get("breathing_feedback", ""),
+                        "teaching_point": feedback.get("diff_detail", "") # teaching_point에 diff_detail 값을 할당
                     })
 
+    # === [수정됨] 이미지 전달 방식을 딕셔너리로 변경 ===
     for point in processed_incorrect_points:
-        if "mouth_shape" not in point:
-            point.update({"mouth_shape": "", "tongue_shape": "", "breathing": ""})
+        if "mouth_feedback" not in point:
+            point.update({"mouth_feedback": "","tongue_position_feedback": "","breathing_feedback": "","teaching_point": point.get("diff_detail", "")})
+            
         expected_char = point.get("expected")
-        img_filename = "default.png"
+        # 자음/모음 이미지 파일명을 담을 딕셔너리 생성
+        image_guides = {}
+
         if expected_char:
-            if expected_char in IMAGE_GUIDE_MAP:
-                img_filename = IMAGE_GUIDE_MAP[expected_char]
-            elif '가' <= expected_char <= '힣':
+            # 글자가 한글 음절인 경우 자음/모음 분리
+            if '가' <= expected_char <= '힣':
                 chosung, jungsung, _ = decompose_hangul(expected_char)
-                img_filename = IMAGE_GUIDE_MAP.get(chosung, IMAGE_GUIDE_MAP.get(jungsung, "default.png"))
-        point["img"] = img_filename
+                
+                # 자음(초성) 이미지 확인 및 추가
+                chosung_img = IMAGE_GUIDE_MAP.get(chosung)
+                if chosung_img:
+                    image_guides["chosung_img"] = chosung_img
+                
+                # 모음(중성) 이미지 확인 및 추가
+                jungsung_img = IMAGE_GUIDE_MAP.get(jungsung)
+                if jungsung_img:
+                    image_guides["jungsung_img"] = jungsung_img
+            # 한글 음절이 아닌 경우 (자/모 단독, 영어 등)
+            else:
+                default_img = IMAGE_GUIDE_MAP.get(expected_char)
+                if default_img:
+                    image_guides["default_img"] = default_img
+        
+        # 기존 'img' 키 대신 'image_guides' 키에 딕셔너리를 할당
+        point["image_guides"] = image_guides
+        # 기존 'img' 키는 제거 (프론트엔드 혼동 방지)
+        if "img" in point:
+            del point["img"]
 
     response_data = {
         "score": str(final_score),
-        "transcription": normalized_user,
+        "my_text": normalized_user,
+        "target_word": normalized_target,
         "incorrect_points": processed_incorrect_points
     }
     
@@ -222,6 +300,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file):
         print(f"경고: 노이즈 제거된 오디오 파일이 이미 삭제되었거나 존재하지 않습니다: {cleaned_audio_path}")
 
     return response_data
+
 
 
 # --- 미니게임 기능 함수 ---

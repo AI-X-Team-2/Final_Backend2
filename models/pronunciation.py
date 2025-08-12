@@ -7,7 +7,7 @@ from typing import List
 class IncorrectPoint(BaseModel):
     expected: str
     actual: str
-    img: str
+    image_guides: str
     diff_detail: str
     mouth_shape: str
     tongue_shape: str

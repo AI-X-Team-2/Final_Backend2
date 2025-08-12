@@ -5,9 +5,9 @@ from app.database import Base
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(10), unique=True, nullable=False)
+    username = Column(String(8), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
-    password = Column(String(100), nullable=False)
+    password = Column(String(255), nullable=False)
     results = relationship("Result", back_populates="user", passive_deletes=True)
 
 class Levels(Base):
@@ -48,10 +48,10 @@ class PronunciationData(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     # 'ㄱ', 'ㅏ' 등 한글 자모음
-    hangul_char = Column(String, unique=True, index=True, nullable=False)
+    hangul_char = Column(String(255), unique=True, index=True, nullable=False)
     # /static/images/c-g.png 와 같은 기존 이미지 경로
-    image_url = Column(String, nullable=True)
+    image_url = Column(String(255), nullable=True)
     # Cloudinary에 저장된 영상의 URL
-    video_url = Column(String, nullable=True)
+    video_url = Column(String(255), nullable=True)
     
 #위 모델을 추가한 후, Base.metadata.create_all(bind=engine) 코드가 실행될 때 pronunciation_data 테이블이 새로 생성됩니다.

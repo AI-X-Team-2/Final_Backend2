@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 # 데이터베이스 설정 및 모델 임포트
 from app.database import Base, engine
 from app.routers import users, results, pronunciation # router 파일 임포트
-from app.utils.utils import init_levels
 
 # 라우터 임포트
 from app.routers import users, results, pronunciation # 기존 routers/pronunciation.py
@@ -19,8 +18,6 @@ load_dotenv()
 
 # 데이터베이스 테이블 생성
 Base.metadata.create_all(bind=engine)
-# Levels 테이블 초기값 삽입
-init_levels()
 
 # FastAPI 앱 생성 및 설정
 app = FastAPI(title="유음 database")

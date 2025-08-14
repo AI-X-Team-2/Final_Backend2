@@ -3,15 +3,13 @@ from typing import Optional, List, Literal
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
-
 # =========================
 # 공용 타입
 # =========================
 FeedbackType = Literal["basic", "real_life"]
 
-
 # =========================
-# 사용자 스키마
+# 사용자 스키마 (변경 없음)
 # =========================
 class UserCreate(BaseModel):
     username: str
@@ -30,9 +28,9 @@ class UserOut(BaseModel):
     user_id: int
     username: str
     email: EmailStr
-    max_stage: Optional[int] = None
-    max_step: Optional[int] = None
-    max_level: Optional[int] = None
+    max_stage: Optional[int] = 0
+    max_step: Optional[int] = 0
+    max_level: Optional[int] = 0
 
     class Config:
         from_attributes = True  # pydantic v2
@@ -40,13 +38,11 @@ class UserOut(BaseModel):
 
 # =========================
 # 음절 단위 상세 피드백 (SyllableFeedback)
+#  - 모델에 없는 wrong_* 필드는 제거
 # =========================
 class SyllableFeedbackCreate(BaseModel):
-    syllable: str                      # 예: "바", "ㅂ+ㅏ"
+    syllable: str
     correct_syllable: str
-    wrong_initial: Optional[str] = None
-    wrong_medial: Optional[str] = None
-    wrong_final: Optional[str] = None
     mouth_shape_feedback: Optional[str] = None
     tongue_shape_feedback: Optional[str] = None
     breath_feedback: Optional[str] = None
@@ -57,9 +53,6 @@ class SyllableFeedbackOut(BaseModel):
     syllable_feedback_id: int
     syllable: str
     correct_syllable: str
-    wrong_initial: Optional[str] = None
-    wrong_medial: Optional[str] = None
-    wrong_final: Optional[str] = None
     mouth_shape_feedback: Optional[str] = None
     tongue_shape_feedback: Optional[str] = None
     breath_feedback: Optional[str] = None
@@ -71,28 +64,15 @@ class SyllableFeedbackOut(BaseModel):
 
 
 # =========================
-# 타입별 1:1 상세 (Basic / RealLife)
+# 단일 1:1 상세 (PronunciationFeedback)
+#  - 기존 basic/real_life 2종을 통합
 # =========================
-class BasicPronunciationFeedbackCreate(BaseModel):
+class PronunciationIn(BaseModel):
     score: int
     pronounced_word: str
     problem_word: str
 
-class RealLifePronunciationFeedbackCreate(BaseModel):
-    score: int
-    pronounced_word: str
-    problem_word: str
-
-class BasicPronunciationFeedbackOut(BaseModel):
-    feedback_id: int
-    score: int
-    pronounced_word: str
-    problem_word: str
-
-    class Config:
-        from_attributes = True
-
-class RealLifePronunciationFeedbackOut(BaseModel):
+class PronunciationOut(BaseModel):
     feedback_id: int
     score: int
     pronounced_word: str
@@ -104,36 +84,26 @@ class RealLifePronunciationFeedbackOut(BaseModel):
 
 # =========================
 # 상위 FEEDBACK (부모)
+#  - basic / real_life 대신 pronunciation 1개만 둠
 # =========================
 class FeedbackCreate(BaseModel):
     """
-    피드백 생성용 입력 스키마.
-    1) Feedback 레코드 생성 (feedback_type 지정)
-    2) 타입별 상세(basic/real_life) 1:1 내용
-    3) 하위 음절 상세들(0개 이상)
+    1) Feedback(feedback_type) 생성
+    2) pronunciation(1:1) 선택 생성
+    3) syllable_feedbacks(0..N) 선택 생성
     """
     user_id: int
-    feedback_type: FeedbackType
-
-    # 타입별 1:1 상세 (둘 중 하나만 채우는 걸 컨트롤러/서비스에서 보장)
-    basic: Optional[BasicPronunciationFeedbackCreate] = None
-    real_life: Optional[RealLifePronunciationFeedbackCreate] = None
-
-    # 음절 상세(선택)
+    feedback_type: FeedbackType                   # "basic" | "real_life"
+    pronunciation: Optional[PronunciationIn] = None
     syllable_feedbacks: Optional[List[SyllableFeedbackCreate]] = None
-
 
 class FeedbackOut(BaseModel):
     feedback_id: int
     user_id: int
     feedback_type: FeedbackType
-    created_at: Optional[datetime] = None  # ISO 문자열로 직렬화됨
+    created_at: Optional[datetime] = None
 
-    # 타입별 1:1 상세
-    basic: Optional[BasicPronunciationFeedbackOut] = None
-    real_life: Optional[RealLifePronunciationFeedbackOut] = None
-
-    # 하위 음절 상세들
+    pronunciation: Optional[PronunciationOut] = None
     syllable_feedbacks: List[SyllableFeedbackOut] = []
 
     class Config:
@@ -142,10 +112,10 @@ class FeedbackOut(BaseModel):
 
 # =========================
 # (선택) 발음 분석 응답 포맷
-#  - 서비스 레이어에서 분석 결과를 즉시 내려줄 때 사용
-#  - DB 스키마와 1:1 매핑은 아님
+#  - 서비스 레이어의 즉시 응답용 (DB 스키마와 1:1은 아님)
+#  - 모델 클래스명과 헷갈리지 않게 이름을 바꾸는 것을 권장
 # =========================
-class PronunciationFeedback(BaseModel):
+class AnalysisPoint(BaseModel):  # ← 이전 이름: PronunciationFeedback (혼동 방지 변경)
     wrong_text: str
     expected: str
     teaching_point: str
@@ -156,7 +126,13 @@ class PronunciationFeedback(BaseModel):
     breathing_feedback: str
 
 class PronunciationAnalysisResponse(BaseModel):
-    score: int                 # 점수는 숫자형이 자연스러워서 int 권장
-    my_text: str               # 사용자가 실제로 말한 텍스트
-    target_word: str           # 목표/문제 단어
-    incorrect_points: List[PronunciationFeedback]
+    score: int
+    my_text: str
+    target_word: str
+    incorrect_points: List[AnalysisPoint]
+
+# -------- 응답 스키마(필요한 3개만) --------
+class ProgressOut(BaseModel):
+    max_stage: Optional[int] = 0
+    max_step: Optional[int] = 0
+    max_level: Optional[int] = 0

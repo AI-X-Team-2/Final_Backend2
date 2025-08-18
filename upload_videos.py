@@ -30,7 +30,11 @@ cloudinary.config(
 
 # FastAPI 서버의 기본 주소를 .env 파일에서 가져옵니다.
 # .env 파일에 추가해주세요. 예: BASE_URL="http://127.0.0.1:8000"
+<<<<<<< HEAD
 BASE_URL = os.getenv("MYSQL_URL", "http://127.0.0.1:8000")
+=======
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
+>>>>>>> origin/develop
 
 # 데이터베이스 세션을 생성합니다.
 db = SessionLocal()

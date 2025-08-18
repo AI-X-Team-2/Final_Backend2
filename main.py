@@ -8,15 +8,28 @@ from dotenv import load_dotenv
 
 # 데이터베이스 설정 및 모델 임포트
 from app.database import Base, engine
+<<<<<<< HEAD
 
 # 라우터 임포트
 from app.routers import users, results, pronunciation, progress, sessions # 기존 routers/pronunciation.py
+=======
+from app.routers import users, results, pronunciation # router 파일 임포트
+from app.utils.utils import init_levels
+
+# 라우터 임포트
+from app.routers import users, results, pronunciation # 기존 routers/pronunciation.py
+>>>>>>> origin/develop
 
 # .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
 
 # 데이터베이스 테이블 생성
 Base.metadata.create_all(bind=engine)
+<<<<<<< HEAD
+=======
+# Levels 테이블 초기값 삽입
+init_levels()
+>>>>>>> origin/develop
 
 # FastAPI 앱 생성 및 설정
 app = FastAPI(title="유음 database")
@@ -33,9 +46,12 @@ app.add_middleware(
 app.include_router(pronunciation.router)
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(results.router, prefix="/api/results", tags=["Results"])
+<<<<<<< HEAD
 app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["Study Sessions"])
 
+=======
+>>>>>>> origin/develop
 
 # 정적 파일(이미지)을 서빙할 경로를 마운트합니다.
 app.mount("/static/images", StaticFiles(directory="static/images"), name="static_images")

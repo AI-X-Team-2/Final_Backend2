@@ -1,5 +1,6 @@
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
+<<<<<<< HEAD
 
 from dotenv import load_dotenv
 from fastapi import HTTPException, Depends, status
@@ -13,6 +14,11 @@ from typing import Optional
 
 import os
 import jwt
+=======
+import jwt
+import os
+from dotenv import load_dotenv
+>>>>>>> origin/develop
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -32,6 +38,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+<<<<<<< HEAD
 
 
 # Import FastAPI dependencies
@@ -81,3 +88,5 @@ def get_current_user(
     if not db_user:
         raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다.")
     return db_user
+=======
+>>>>>>> origin/develop

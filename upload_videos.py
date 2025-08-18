@@ -12,12 +12,6 @@ from app.models import PronunciationData
 from app.utils.hangul import decompose_hangul # 한글 분해 함수
 from app.core.config import IMAGE_GUIDE_MAP   # 자모음-이미지 매핑
 
-# 테이블 이름 pronunciation_videos
-
-#스키마 파일에 두개 아래 추가함
-# correct_img_url: Optional[str] = None 
-# correct_video_url: Optional[str] = None 
-
 # .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
 
@@ -30,7 +24,7 @@ cloudinary.config(
 
 # FastAPI 서버의 기본 주소를 .env 파일에서 가져옵니다.
 # .env 파일에 추가해주세요. 예: BASE_URL="http://127.0.0.1:8000"
-BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:8000")
+BASE_URL = os.getenv("MYSQL_URL", "http://127.0.0.1:8000")
 
 # 데이터베이스 세션을 생성합니다.
 db = SessionLocal()

@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
 
 from sqlalchemy.orm import Session
+
 from app.models import PronunciationData, StudyResult, StudyFeedback
 # from app.core.config import IMAGE_GUIDE_MAP
 
@@ -123,7 +124,6 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
     audio.set_frame_rate(16000).set_channels(1).export(wav_stream, format="wav")
     wav_stream.seek(0)
     audio_data, sample_rate = sf.read(wav_stream)
-
     clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

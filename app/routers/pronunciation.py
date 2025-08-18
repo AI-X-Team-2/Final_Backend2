@@ -5,6 +5,7 @@ from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Depends # 
 from fastapi.responses import JSONResponse
 from app.schemas import PronunciationAnalysisResponse
 from app.services.analysis_service import analyze_user_pronunciation, transcribe_audio_for_minigame
+
 from sqlalchemy.orm import Session
 from app.database import get_db 
 
@@ -13,6 +14,7 @@ router = APIRouter()
 
 @router.post("/analyze", response_model=PronunciationAnalysisResponse, tags=["Pronunciation Analysis"])
 async def analyze_pronunciation_endpoint(
+
     target_sentence: str = Form(...),
     audio_file: UploadFile = File(...),
     session_id: str | None = Form(None),  # ★ 추가: 세션 ID(없으면 저장 스킵)

@@ -18,11 +18,7 @@ from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
 
 from sqlalchemy.orm import Session
-<<<<<<< HEAD
-from app.models import PronunciationData, StudyResult, StudyFeedback
-=======
 from app.models import PronunciationData
->>>>>>> origin/develop
 # from app.core.config import IMAGE_GUIDE_MAP
 
 
@@ -118,11 +114,7 @@ def _evaluate_pronunciation_with_llm(llm_input_pairs):
 
 
 # --- 발음 교정 기능 함수 ---
-<<<<<<< HEAD
-async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session, session_id: str | None = None):
-=======
 async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session):
->>>>>>> origin/develop
     """사용자 발음을 분석하고 피드백을 반환합니다."""
     audio_content = await audio_file.read()
     audio_stream = io.BytesIO(audio_content)
@@ -131,11 +123,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
     audio.set_frame_rate(16000).set_channels(1).export(wav_stream, format="wav")
     wav_stream.seek(0)
     audio_data, sample_rate = sf.read(wav_stream)
-<<<<<<< HEAD
-
-=======
     
->>>>>>> origin/develop
     clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -224,11 +212,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         expected_char = point.get("expected")
         correct_img_url = "default.png" # 기본 이미지
         correct_video_url = None # 영상 URL은 기본적으로 없음
-<<<<<<< HEAD
-
-=======
         
->>>>>>> origin/develop
         if expected_char and '가' <= expected_char <= '힣':
             # 한글 음절일 경우 초성, 중성을 분리
             chosung, jungsung, _ = decompose_hangul(expected_char)
@@ -247,55 +231,12 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         point["correct_video_url"] = correct_video_url # 응답에 비디오 URL 추가
         point["wrong_text"] = point.get("actual", "")
         
-<<<<<<< HEAD
-    # ✅ 점수는 int 유지 (스키마와 일치)
-    response_data = {
-        "score": int(final_score),            # ★ "문자열" -> 정수로
-=======
     response_data = {
         "score": str(final_score),
->>>>>>> origin/develop
         "my_text": normalized_user,
         "target_word": normalized_target,
         "incorrect_points": processed_incorrect_points
     }
-<<<<<<< HEAD
-
-    # === ★ DB 저장 (옵션) ===
-    if session_id:
-        try:
-            # 1) 세션별 결과 1건 저장
-            result_row = StudyResult(
-                session_id=session_id,
-                score=int(final_score)
-            )
-            db.add(result_row)
-            db.flush()  # result_id가 필요한 경우를 대비 (여기선 사용X)
-
-            # 2) 각 오탐 포인트 → StudyFeedback 저장
-            feedback_rows = []
-            for p in processed_incorrect_points:
-                # StudyFeedback 스키마상 score는 필수 → 전체 점수로 저장(단일 단어/문장 기준)
-                feedback_rows.append(
-                    StudyFeedback(
-                        session_id=session_id,
-                        score=int(final_score),
-                        mouth_feedback=p.get("mouth_feedback", "") or "",
-                        tongue_position_feedback=p.get("tongue_position_feedback", "") or "",
-                        breathing_feedback=p.get("breathing_feedback", "") or "",
-                        teaching_point=p.get("teaching_point", "") or ""
-                    )
-                )
-            if feedback_rows:
-                db.add_all(feedback_rows)
-
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            print(f"[DB 저장 오류] StudyResult/StudyFeedback 저장 중 에러: {e}")
-
-=======
->>>>>>> origin/develop
     return response_data
 
 

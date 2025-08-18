@@ -306,11 +306,20 @@ async def transcribe_audio_for_minigame(audio):
             f.write(content)
         print(f"미니게임용 오디오 저장 완료: {temp_filepath}")
 
-        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko")
-        transcription = "".join(segment.text for segment in segments).strip()
+        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko", temperature=0.0, vad_filter=True)
+        transcription = "".join(segment.text.strip() for segment in segments)
+        transcription = re.sub(r'[^\w]', '', transcription)
+        
         print(f"미니게임 STT 결과: {transcription}")
         return {"my_text": transcription}
 
     except Exception as e:
         print(f"미니게임 STT 처리 중 오류 발생: {e}")
         raise HTTPException(status_code=500, detail=f"오디오 처리 중 서버 오류 발생: {str(e)}")
+    
+    finally:
+        # 이 부분이 추가된 부분입니다.
+        # 성공 여부와 관계없이 임시 파일을 삭제
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+            print(f"임시 오디오 파일 삭제 완료: {temp_filepath}")

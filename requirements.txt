@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 annotated-types
 anyio
 archspec
@@ -112,25 +111,3 @@ websockets
 wheel
 win_inet_pton
 zstandard
-=======
-# Web Framework
-fastapi
-uvicorn[standard]
-python-multipart
-
-# AI & Machine Learning
-#pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-transformers
-sentencepiece
-accelerate
-openai
-faster-whisper
-# Audio Processing
-numpy
-pydub
-soundfile
-noisereduce
-
-# Utilities
-python-dotenv
->>>>>>> origin/develop

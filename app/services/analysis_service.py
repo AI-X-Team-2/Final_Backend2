@@ -11,7 +11,7 @@ import soundfile as sf
 from pydub import AudioSegment
 from openai import OpenAI
 from dotenv import load_dotenv
-
+import re
 import torch
 from faster_whisper import WhisperModel
 from fastapi import HTTPException
@@ -61,8 +61,21 @@ def _speech_to_text(audio_file_path: str):
             print(f"오디오 파일이 존재하지 않습니다: {audio_file_path}")
             return ""
 
-        segments, _ = whisper_model.transcribe(audio_file_path, language="ko")
-        transcription = "".join(segment.text for segment in segments).strip()
+        initial_prompt = None
+        vad_filter_flag = True
+        temperature = 0.0
+
+        segments, _ = whisper_model.transcribe(
+            audio_file_path,
+            language="ko",
+            vad_filter=vad_filter_flag,
+            initial_prompt=initial_prompt,
+            temperature=temperature,
+        )
+        
+        transcription = "".join(segment.text.strip() for segment in segments)
+        transcription = re.sub(r'[^\w]', '', transcription)
+        
         print(f"STT 결과: {transcription}")
         return transcription
     except Exception as e:

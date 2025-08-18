@@ -27,3 +27,16 @@ async def analyze_pronunciation_endpoint(
     except Exception as e:
         print(f"발음 분석 중 심각한 오류 발생: {e}")
         raise HTTPException(status_code=500, detail=f"서버에서 오디오 파일을 처리하는 중 오류가 발생했습니다: {str(e)}")
+    
+@router.post("/transcribe_audio", tags=["Minigame"])
+async def transcribe_audio_for_minigame_endpoint(audio: UploadFile = File(...)):
+    """
+    오디오 파일을 받아 텍스트로 변환하는 간단한 STT 기능입니다.
+    미니게임 등 실시간 텍스트 변환이 필요할 때 사용합니다.
+    """
+    try:
+        return await transcribe_audio_for_minigame(audio)
+    except Exception as e:
+        print(f"미니게임 STT 처리 중 오류 발생: {e}")
+        raise HTTPException(status_code=500, detail=f"오디오 처리 중 서버 오류 발생: {str(e)}")
+    

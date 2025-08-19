@@ -8,10 +8,9 @@ from dotenv import load_dotenv
 
 # 데이터베이스 설정 및 모델 임포트
 from app.database import Base, engine
-from app.routers import users, results, pronunciation # router 파일 임포트
 
 # 라우터 임포트
-from app.routers import users, results, pronunciation, progress # 기존 routers/pronunciation.py
+from app.routers import users, results, pronunciation, progress, sessions # 기존 routers/pronunciation.py
 
 # .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
@@ -35,6 +34,7 @@ app.include_router(pronunciation.router)
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(results.router, prefix="/api/results", tags=["Results"])
 app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
+app.include_router(sessions.router, prefix="/api/sessions", tags=["Study Sessions"])
 
 
 # 정적 파일(이미지)을 서빙할 경로를 마운트합니다.

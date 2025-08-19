@@ -63,4 +63,6 @@ def delete_user(user: UserDelete, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="비밀번호가 올바르지 않습니다.")
     db.delete(db_user)
     db.commit()
+
     return {"message": "회원 탈퇴가 완료되었습니다."}
+

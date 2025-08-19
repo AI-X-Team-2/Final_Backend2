@@ -3,11 +3,12 @@
 
 from fastapi import APIRouter, Form, File, UploadFile, HTTPException, Depends # Depends 임포트
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+
+from app.database import get_db 
 from app.schemas import PronunciationAnalysisResponse
 from app.services.analysis_service import analyze_user_pronunciation, transcribe_audio_for_minigame
 
-from sqlalchemy.orm import Session
-from app.database import get_db 
 
 # API 라우터 객체를 생성합니다.
 router = APIRouter()
@@ -26,4 +27,5 @@ async def analyze_pronunciation_endpoint(
         return JSONResponse(content=response_data)
     except Exception as e:
         print(f"발음 분석 중 심각한 오류 발생: {e}")
+
         raise HTTPException(status_code=500, detail=f"서버에서 오디오 파일을 처리하는 중 오류가 발생했습니다: {str(e)}")

@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Chec
 from sqlalchemy.sql import func, expression
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON, BIGINT as MYSQL_BIGINT, CHAR
-
+from sqlalchemy.ext.mutable import MutableList  
 from app.database import Base
 from app.utils.utils import generate_code
 
@@ -16,13 +16,13 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False)
     email    = Column(String(100), unique=True, nullable=False)
     password = Column(String(255), nullable=False)
-
-    # ❌ server_default 제거, ✅ ORM 기본값 사용
+    
     max_level = Column(
-        MYSQL_JSON,
+        MutableList.as_mutable(MYSQL_JSON),   # ✅ 변경
         nullable=False,
-        default=lambda: [1],   # INSERT 시 SQLAlchemy가 자동으로 [1] 넣어줌
+        default=lambda: [1],
     )
+
 
 # =========================
 # 발음 가이드(참고)
@@ -49,15 +49,15 @@ class StudySession(Base):
     status         = Column(String(20), nullable=False, server_default="in_progress")
     created_at     = Column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     completed_at   = Column(DateTime(timezone=True), nullable=True)
-
-    # ✅ level: JSON 배열로 저장 (예: [0], [1,2])
+    
     level = Column(
-        MYSQL_JSON,
+        MutableList.as_mutable(MYSQL_JSON),   # ✅ 변경
         nullable=False,
-        default=lambda: [0],   # INSERT 시 [0]
-        comment="학습 레벨 리스트(JSON). 요청의 level(int)을 [level]로 변환해 저장"
+        default=lambda: [0],
+        comment="학습 레벨 리스트(JSON)"
     )
 
+  
     isPassed = Column(Boolean, nullable=False, server_default=expression.false(), comment="통과 여부")
     correct_count = Column(Integer, nullable=True, default=0, comment="정답 개수")
 
@@ -116,70 +116,28 @@ class StudyFeedback(Base):
 class StudyReview(Base):
     __tablename__ = "study_reviews"
 
-    # 독립적인 review_id
-    review_id = Column(
-        CHAR(8),
-        primary_key=True,
-        default=generate_code,
-        comment="리뷰 고유 ID"
-    )
-    
-    # 사용자 FK
-    user_id = Column(
-        MYSQL_BIGINT(unsigned=True),
-        ForeignKey("users.user_id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-        comment="사용자 ID"
-    )
-    
-    target_word = Column(
-        String(255),
-        nullable=False,
-        comment="복습 대상 단어"
-    )
+    review_id = Column(CHAR(8), primary_key=True, default=generate_code)
+    user_id   = Column(MYSQL_BIGINT(unsigned=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
 
-    # 학습 레벨 리스트
+    target_word = Column(String(255), nullable=False)
+
+    # ✅ level 컬럼 추가
     level = Column(
-        MYSQL_JSON,
+        MutableList.as_mutable(MYSQL_JSON),
         nullable=False,
-        default=lambda: [0],
-        comment="학습 레벨 리스트(JSON, list[int])"
+        default=list,
+        comment="학습 레벨 리스트"
     )
 
-    # 선택적 점수
-    score = Column(
-        Integer,
-        nullable=True,
-        comment="점수"
-    )
+    score = Column(Integer, nullable=True, comment="점수")
 
-    # 핵심 피드백 요약 (list[dict])
-    feedback_summary = Column(
-        Text,
-        nullable=True,
-        default="피드백 없음",
-        comment="핵심 피드백 요약(text)"
-    )
+    feedback_summary = Column(Text, nullable=True, default="피드백 없음")
 
-    # 최초 학습 완료 시각
-    created_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        comment="최초 학습 완료 시각"
-    )
-
-    # 마지막으로 틀린 날짜(복습 중 최초/마지막 오답 시각 관리 용도)
-    last_wrong_at = Column(
-        DateTime(timezone=True),
-        nullable=True,
-        comment="복습 중 마지막 오답 시각"
-    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_wrong_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint("score IS NULL OR score >= 0", name="ck_review_score_non_negative"),
     )
 
-    # --- 관계 설정 ---
     user = relationship("User", backref="reviews")

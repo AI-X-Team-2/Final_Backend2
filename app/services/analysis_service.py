@@ -12,14 +12,15 @@ from pydub import AudioSegment
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from sqlalchemy import func
 import torch
 from faster_whisper import WhisperModel
 from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
 
 from sqlalchemy.orm import Session
-from app.models import PronunciationData, StudyResult, StudyFeedback, StudySession
 # from app.core.config import IMAGE_GUIDE_MAP
+from app.models import PronunciationData, StudyResult, StudyFeedback, StudySession, StudyReview
 
 
 # .env 파일에서 환경 변수를 로드합니다.
@@ -272,6 +273,40 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                 )
             if feedback_rows:
                 db.add_all(feedback_rows)
+                
+            # ✅ 3) 점수 < 100이면 StudyReview 저장
+            if int(final_score) < 100:
+                # 세션에서 user_id, level 조회
+                session_obj = db.query(StudySession).filter(
+                    StudySession.session_id == session_id
+                ).first()
+                if not session_obj:
+                    raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+                # level(JSON) → int (비어있을 수 있으므로 방어)
+                level_value = 0
+                if isinstance(session_obj.level, list) and session_obj.level:
+                    level_value = int(session_obj.level[0])
+
+                # 요약 텍스트 구성 (StudyReview.feedback_summary는 Text 컬럼)
+                # teaching_point만 간단히 모아 저장. 더 풍부하게 하려면 mouth/tongue/breathing도 합칠 수 있음.
+                summary_items = []
+                for p in processed_incorrect_points:
+                    tp = p.get("teaching_point") or ""
+                    if tp:
+                        summary_items.append(f"- {tp}")
+                feedback_summary_text = "\n".join(summary_items) if summary_items else "피드백 없음"
+
+                review_row = StudyReview(
+                    user_id=session_obj.user_id,
+                    target_word=normalized_target,
+                    level=[level_value],           # StudyReview.level은 JSON(list[int])
+                    score=int(final_score),
+                    feedback_summary=feedback_summary_text,
+                    last_wrong_at=func.now(),
+                )
+                db.add(review_row)
+
 
             db.commit()
         except Exception as e:

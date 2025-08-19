@@ -119,4 +119,6 @@ class StudySessionOut(BaseModel):
     total_words: int
     level: list[int]
     isPassed: bool  # "true" / "false" 문자열로 저장
+
     correct_count: int
+

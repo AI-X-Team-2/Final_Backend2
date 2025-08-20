@@ -300,6 +300,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                 review_row = StudyReview(
                     user_id=session_obj.user_id,
                     target_word=normalized_target,
+                    recognized_word=normalized_user,  # 사용자가 발음한 단어
                     level=[level_value],
                     score=int(final_score),
                     feedback_summary=feedback_summary_text,
@@ -312,6 +313,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                     review_row = StudyReview(
                         user_id=session_obj.user_id,
                         target_word=normalized_target,
+                        recognized_word=normalized_user,  # 사용자가 발음한 단어
                         level=[level_value],
                         score=int(final_score),
                         feedback_summary=feedback_summary_text,

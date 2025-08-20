@@ -17,11 +17,12 @@ async def analyze_pronunciation_endpoint(
     target_sentence: str = Form(...),
     audio_file: UploadFile = File(...),
     session_id: str | None = Form(None),  # ★ 추가: 세션 ID(없으면 저장 스킵)
+    isReview: bool = Form(False),  # ★ 추가: 리뷰 여부
     db: Session = Depends(get_db)
 ):
     try:
         # ★ session_id 전달
-        response_data = await analyze_user_pronunciation(target_sentence, audio_file, db, session_id=session_id)
+        response_data = await analyze_user_pronunciation(target_sentence, audio_file, db, session_id=session_id, is_review=isReview)
         return JSONResponse(content=response_data)
     except Exception as e:
         print(f"발음 분석 중 심각한 오류 발생: {e}")

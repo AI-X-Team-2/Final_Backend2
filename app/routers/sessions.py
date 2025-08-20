@@ -36,10 +36,10 @@ def complete_session(
     # ✅ 통과 여부 계산 (correct_count vs total_words)
     # =====================================
     total_words = session.total_words or 0
-    correct_count = session.correct_count or 0
+    correctCount = session.correctCount or 0
 
     # 절반 초과 조건 → correct_count > total_words / 2
-    is_passed_bool = correct_count > (total_words / 2)
+    is_passed_bool = correctCount > (total_words / 2)
 
     # (선택) 세션 테이블에 is_passed 같은 컬럼이 있으면 저장
     if hasattr(session, "is_passed"):
@@ -74,5 +74,5 @@ def complete_session(
         total_words=session.total_words,
         level=session.level,
         isPassed=is_passed_bool,  # ✅ bool로 반환
-        correct_count=correct_count,  # ✅ 추가: 학습 결과 포함
+        correctCount=correctCount,  # ✅ 추가: 학습 결과 포함
     )

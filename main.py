@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from app.database import Base, engine
 
 # 라우터 임포트
-from app.routers import users, results, pronunciation, progress, sessions # 기존 routers/pronunciation.py
+from app.routers import users, results, pronunciation, progress, sessions, reviews
 
 # .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
@@ -35,6 +35,7 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(results.router, prefix="/api/results", tags=["Results"])
 app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["Study Sessions"])
+app.include_router(reviews.router, prefix="/api/reviews", tags=["Reviews"])
 
 
 # 정적 파일(이미지)을 서빙할 경로를 마운트합니다.

@@ -35,3 +35,4 @@ def create_practice_session(
     db.refresh(session_row)
 
     return PracticeSessionCreateResponse(session_id=session_row.session_id)
+

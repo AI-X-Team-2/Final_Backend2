@@ -36,7 +36,6 @@ app.include_router(results.router, prefix="/api/results", tags=["Results"])
 app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["Study Sessions"])
 
-
 # 정적 파일(이미지)을 서빙할 경로를 마운트합니다.
 app.mount("/static/images", StaticFiles(directory="static/images"), name="static_images")
 

@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
 
 from sqlalchemy.orm import Session
+
 # from app.core.config import IMAGE_GUIDE_MAP
 from app.models import PronunciationData, StudyResult, StudyFeedback, StudySession, StudyReview
 from app.utils.summarize import summarize_feedback_with_gpt
@@ -244,12 +245,16 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
             # 1) 세션별 결과 1건 저장
             result_row = StudyResult(
                 session_id=session_id,
+
                 score=int(final_score),
+
                 target_word=normalized_target,
                 recognized_word=normalized_user  # 사용자가 발음한 단어
+
             )
             db.add(result_row)
             db.flush()  # result_id가 필요한 경우를 대비 (여기선 사용X)
+
 
             if int(final_score) == 100:
                 session_obj = db.query(StudySession).filter(
@@ -259,12 +264,15 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                     session_obj.correctCount = (session_obj.correctCount or 0) + 1
                     db.add(session_obj)
                 
+
             feedback_rows = []
             for p in processed_incorrect_points:
                 # StudyFeedback 스키마상 score는 필수 → 전체 점수로 저장(단일 단어/문장 기준)
                 feedback_rows.append(
                     StudyFeedback(
+
                         result_id=result_row.result_id,
+
                         score=int(final_score),
                         mouth_feedback=p.get("mouth_feedback", "") or "",
                         tongue_position_feedback=p.get("tongue_position_feedback", "") or "",
@@ -274,6 +282,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                 )
             if feedback_rows:
                 db.add_all(feedback_rows)
+
                 
             session_obj = db.query(StudySession).filter(
                 StudySession.session_id == session_id
@@ -297,6 +306,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                 ).delete(synchronize_session=False)
 
                 # ✅ 새 리뷰 저장 (점수와 무관하게 저장)
+
                 review_row = StudyReview(
                     user_id=session_obj.user_id,
                     target_word=normalized_target,

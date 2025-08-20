@@ -33,7 +33,6 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-
 # Import FastAPI dependencies
 bearer_scheme = HTTPBearer(auto_error=False)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login", auto_error=False)
@@ -80,4 +79,6 @@ def get_current_user(
     )
     if not db_user:
         raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다.")
+
     return db_user
+

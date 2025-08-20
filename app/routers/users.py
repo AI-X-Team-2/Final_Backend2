@@ -9,6 +9,7 @@ from datetime import timedelta
 
 router = APIRouter()
 
+
 @router.post("/signup")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     if is_blank(user.username) or is_blank(user.email) or is_blank(user.password):
@@ -43,6 +44,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     if not db_user or not verify_password(user.password, db_user.password):
         raise HTTPException(status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다.")
     access_token = create_access_token(
+
         data={"sub": db_user.username, "user_id": db_user.user_id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
@@ -61,5 +63,6 @@ def delete_user(user: UserDelete, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="비밀번호가 올바르지 않습니다.")
     db.delete(db_user)
     db.commit()
+
     return {"message": "회원 탈퇴가 완료되었습니다."}
 

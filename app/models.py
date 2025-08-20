@@ -69,7 +69,7 @@ class StudySession(Base):
 
   
     isPassed = Column(Boolean, nullable=False, server_default=expression.false(), comment="통과 여부")
-    correct_count = Column(Integer, nullable=True, default=0, comment="정답 개수")
+    correctCount = Column(Integer, nullable=True, default=0, comment="정답 개수")
 
 
     __table_args__ = (
@@ -98,6 +98,7 @@ class StudyResult(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="학습 시작 시각")
 
     target_word = Column(String(255), nullable=False, comment="정답 단어")
+    recognized_word = Column(String(255), nullable=False, comment="사용자가 발음한 단어")
 
 
     __table_args__ = (
@@ -147,6 +148,7 @@ class StudyReview(Base):
     user_id   = Column(MYSQL_BIGINT(unsigned=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
 
     target_word = Column(String(255), nullable=False)
+    recognized_word = Column(String(255), nullable=False, comment="사용자가 발음한 단어")
 
     # ✅ level 컬럼 추가
     level = Column(

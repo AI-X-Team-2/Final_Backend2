@@ -121,4 +121,18 @@ class StudySessionOut(BaseModel):
     isPassed: bool  # "true" / "false" 문자열로 저장
 
     correctCount: int
+    
+
+class StudyReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    review_id: str
+    user_id: int
+    target_word: str
+    recognized_word: str
+    level: List[int]
+    score: Optional[int] = None
+    feedback_summary: Optional[str] = None
+    created_at: datetime
+    last_wrong_at: Optional[datetime] = None
 

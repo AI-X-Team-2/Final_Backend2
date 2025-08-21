@@ -96,8 +96,8 @@ class ProgressOut(BaseModel):
 # 학습 세션 생성 스키마
 # =========================
 class PracticeSessionCreate(BaseModel):
-    mode: Literal["daily", "basic"]
-    level: int = Field(0, ge=0, description="프론트는 단일 정수로 보냄. 서버가 [level]로 저장")
+    mode: Literal["daily", "basic", "practice", "review"]
+    level: list[int] = Field(default_factory=lambda: [0])
     total_words: int = Field(default=0, ge=0, description="총 단어 수 (기본값: 0, 음수 불가)")
 
 class PracticeSessionCreateResponse(BaseModel):

@@ -17,7 +17,7 @@ import torch
 from faster_whisper import WhisperModel
 from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
-
+import re
 from sqlalchemy.orm import Session
 
 # from app.core.config import IMAGE_GUIDE_MAP
@@ -63,8 +63,21 @@ def _speech_to_text(audio_file_path: str):
             print(f"오디오 파일이 존재하지 않습니다: {audio_file_path}")
             return ""
 
-        segments, _ = whisper_model.transcribe(audio_file_path, language="ko")
-        transcription = "".join(segment.text for segment in segments).strip()
+        initial_prompt = None
+        vad_filter_flag = True
+        temperature = 0.0
+
+        segments, _ = whisper_model.transcribe(
+            audio_file_path,
+            language="ko",
+            vad_filter=vad_filter_flag,
+            initial_prompt=initial_prompt,
+            temperature=temperature,
+        )
+        
+        transcription = "".join(segment.text.strip() for segment in segments)
+        transcription = re.sub(r'[^\w]', '', transcription)
+        
         print(f"STT 결과: {transcription}")
         return transcription
     except Exception as e:
@@ -115,6 +128,80 @@ def _evaluate_pronunciation_with_llm(llm_input_pairs):
         print(f"LLM 평가 중 심각한 오류 발생: {e}")
         return {"incorrect_points": []}
 
+
+# --- ★새롭게 추가된 부분★: 문장 발음 평가 기능 ---
+def _evaluate_sentence_with_llm(target_text: str, user_transcript: str):
+    """
+    LLM을 사용하여 문장 발음의 평가, 교정, 총평 피드백을 생성합니다.
+    """
+    try:
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        system_prompt = f"""
+        당신은 한국어 발음 교육 전문가입니다. 사용자의 한국어 문장 발음을 듣고 아래의 지시에 따라 평가, 교정, 총평을 제공해주세요.
+        사용자가 발음한 문장: "{user_transcript}"
+        올바른 문장: "{target_text}"
+
+        # 출력 지침
+        1. 반드시 다음 JSON 형식으로만 응답해야 합니다.
+        {{
+          "sentence_feedback": {{
+            "evaluation": "전반적인 발음이 어떤지 간단히 평가. (2~3줄)",
+            "correction": "틀린 부분이나 어색한 발음이 있다면, 어떤 글자를 어떻게 교정해야 하는지 구체적인 방법을 알려주세요. (2~3줄)",
+            "general_feedback": "전반적인 총평과 다음 연습을 위한 조언을 해주세요. (2~3줄)"
+          }}
+        }}
+        """
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt}
+            ]
+        )
+        evaluation_result = json.loads(response.choices[0].message.content)
+        print("LLM 문장 피드백 생성 완료! 응답 데이터:", evaluation_result)
+        return evaluation_result
+    except Exception as e:
+        print(f"LLM 문장 평가 중 오류 발생: {e}")
+        return {"sentence_feedback": {"evaluation": "오류 발생", "correction": "오류 발생", "general_feedback": "오류 발생"}}
+
+
+async def analyze_user_sentence(target_sentence: str, audio_file):
+    """
+    사용자 문장 발음을 분석하고 피드백을 반환합니다.
+    (기존 단어 평가 로직과 분리됨)
+    """
+    audio_content = await audio_file.read()
+    audio_stream = io.BytesIO(audio_content)
+    audio = AudioSegment.from_file(audio_stream)
+    wav_stream = io.BytesIO()
+    audio.set_frame_rate(16000).set_channels(1).export(wav_stream, format="wav")
+    wav_stream.seek(0)
+    audio_data, sample_rate = sf.read(wav_stream)
+    
+    clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    cleaned_audio_path = os.path.join(PRONUNCIATION_AUDIO_DIR, f"sentence_cleaned_{timestamp}.wav")
+    sf.write(cleaned_audio_path, clean_audio_data, sample_rate)
+    
+    user_transcript = _speech_to_text(cleaned_audio_path)
+    if not user_transcript: user_transcript = ""
+
+    normalized_target = target_sentence.strip()
+    
+    # LLM을 통해 피드백 생성
+    feedback = _evaluate_sentence_with_llm(normalized_target, user_transcript)
+
+    # 임시 파일 삭제
+    if os.path.exists(cleaned_audio_path):
+        os.remove(cleaned_audio_path)
+        
+    return {
+        "my_text": user_transcript,
+        "target_word": normalized_target,
+        "sentence_feedback": feedback["sentence_feedback"]
+    }
 
 # --- 발음 교정 기능 함수 ---
 async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session, session_id: str | None = None, is_review: bool = False,):
@@ -360,11 +447,20 @@ async def transcribe_audio_for_minigame(audio):
             f.write(content)
         print(f"미니게임용 오디오 저장 완료: {temp_filepath}")
 
-        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko")
-        transcription = "".join(segment.text for segment in segments).strip()
+        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko", temperature=0.0, vad_filter=True)
+        transcription = "".join(segment.text.strip() for segment in segments)
+        transcription = re.sub(r'[^\w]', '', transcription)
+        
         print(f"미니게임 STT 결과: {transcription}")
         return {"my_text": transcription}
 
     except Exception as e:
         print(f"미니게임 STT 처리 중 오류 발생: {e}")
         raise HTTPException(status_code=500, detail=f"오디오 처리 중 서버 오류 발생: {str(e)}")
+    
+    finally:
+        # 이 부분이 추가된 부분입니다.
+        # 성공 여부와 관계없이 임시 파일을 삭제
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+            print(f"임시 오디오 파일 삭제 완료: {temp_filepath}")

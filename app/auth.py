@@ -81,4 +81,3 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="사용자를 찾을 수 없습니다.")
 
     return db_user
-

@@ -301,18 +301,16 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         correct_video_url = None # 영상 URL은 기본적으로 없음
 
         if expected_char and '가' <= expected_char <= '힣':
-            # 한글 음절일 경우 초성, 중성을 분리
-            chosung, jungsung, _ = decompose_hangul(expected_char)
-            
-            # 1순위: 초성으로 데이터 검색
-            char_data = db.query(PronunciationData).filter(PronunciationData.hangul_char == chosung).first()
-            if not char_data:
-                # 2순위: 초성 데이터가 없으면 중성으로 검색
-                char_data = db.query(PronunciationData).filter(PronunciationData.hangul_char == jungsung).first()
+            # 완성형 글자 그대로 조회
+            char_data = db.query(PronunciationData).filter(
+                PronunciationData.hangul_char == expected_char
+            ).first()
 
             if char_data:
-                correct_img_url = char_data.image_url # DB에서 이미지 URL 가져오기
-                correct_video_url = char_data.video_url # DB에서 비디오 URL 가져오기
+                correct_img_url = char_data.image_url
+                correct_video_url = char_data.video_url
+        
+        print(f"[DEBUG] 글자 '{expected_char}'에 대한 이미지 URL: {correct_img_url}, 비디오 URL: {correct_video_url}")
         
         point["correct_img_url"] = correct_img_url
         point["correct_video_url"] = correct_video_url # 응답에 비디오 URL 추가

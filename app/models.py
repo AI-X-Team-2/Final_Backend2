@@ -143,3 +143,4 @@ class StudyReview(Base):
     )
 
     user = relationship("User", backref="reviews")
+

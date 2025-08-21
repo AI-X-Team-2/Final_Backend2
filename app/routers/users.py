@@ -65,3 +65,4 @@ def delete_user(user: UserDelete, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "회원 탈퇴가 완료되었습니다."}
+

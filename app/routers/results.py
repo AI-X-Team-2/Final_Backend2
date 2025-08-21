@@ -52,7 +52,9 @@ def create_practice_session(
 
         return PracticeSessionCreateResponse(session_id=session_row.session_id)
 
+
     except Exception as e:
         db.rollback()
         print(f"[ERROR] 세션 생성 중 오류: {e}")
         raise HTTPException(status_code=500, detail="세션 생성 중 서버 오류가 발생했습니다.")
+

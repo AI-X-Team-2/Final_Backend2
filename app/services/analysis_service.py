@@ -289,37 +289,39 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
             # GPT 요약 생성 (기존과 동일)
             feedback_summary_text = await summarize_feedback_with_gpt(processed_incorrect_points)
 
-            if is_review:
-                # ✅ 동일 단어 기존 리뷰 삭제
+            if int(final_score) == 100:
                 db.query(StudyReview).filter(
                     StudyReview.user_id == session_obj.user_id,
                     StudyReview.target_word == normalized_target
                 ).delete(synchronize_session=False)
 
-                # ✅ 새 리뷰 저장 (점수와 무관하게 저장)
-                review_row = StudyReview(
-                    user_id=session_obj.user_id,
-                    target_word=normalized_target,
-                    recognized_word=normalized_user,  # 사용자가 발음한 단어
-                    level=[level_value],
-                    score=int(final_score),
-                    feedback_summary=feedback_summary_text,
-                    last_wrong_at=func.now(),
-                )
-                db.add(review_row)
             else:
-                # ✅ 기존 로직: 점수 < 100일 때만 리뷰 저장
-                if int(final_score) < 100:
-                    review_row = StudyReview(
+                # ✅ 100점이 아닐 때만 요약 생성 (비용 절감)
+                feedback_summary_text = await summarize_feedback_with_gpt(processed_incorrect_points)
+                
+                existing = db.query(StudyReview).filter(
+                    StudyReview.user_id == session_obj.user_id,
+                    StudyReview.target_word == normalized_target
+                ).first()
+
+                if existing:
+                    existing.recognized_word = normalized_user
+                    existing.level = [level_value]
+                    existing.score = int(final_score)
+                    existing.feedback_summary = feedback_summary_text
+                    existing.last_wrong_at = func.now()
+                    db.add(existing)
+                else:
+                    # 신규 생성
+                    db.add(StudyReview(
                         user_id=session_obj.user_id,
                         target_word=normalized_target,
-                        recognized_word=normalized_user,  # 사용자가 발음한 단어
+                        recognized_word=normalized_user,
                         level=[level_value],
                         score=int(final_score),
                         feedback_summary=feedback_summary_text,
                         last_wrong_at=func.now(),
-                    )
-                    db.add(review_row)
+                    ))
 
 
             db.commit()

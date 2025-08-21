@@ -21,12 +21,17 @@ Base.metadata.create_all(bind=engine)
 # FastAPI 앱 생성 및 설정
 app = FastAPI(title="유음 database")
 
+origins = [
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173", # 필요하면 이것도 추가
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 # API 라우터들을 메인 앱에 포함시킵니다.

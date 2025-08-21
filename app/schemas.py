@@ -84,6 +84,7 @@ class PronunciationAnalysisResponse(BaseModel):
     score: int
     my_text: str
     target_word: str
+    video_url: Optional[str] = None  # 공통 비디오 URL
     incorrect_points: List[AnalysisPoint]
 
 # =========================
@@ -136,3 +137,4 @@ class StudyReviewOut(BaseModel):
     feedback_summary: Optional[str] = None
     created_at: datetime
     last_wrong_at: Optional[datetime] = None
+    

@@ -90,6 +90,8 @@ class PronunciationAnalysisResponse(BaseModel):
 # 단계 응답 스키마
 # =========================
 class ProgressOut(BaseModel):
+    username: str
+    email: EmailStr
     max_level: List[int] = Field(default_factory=lambda: [1])   # ✅ 항상 [1] 기본값
 
 # =========================
@@ -119,9 +121,8 @@ class StudySessionOut(BaseModel):
     total_words: int
     level: list[int]
     isPassed: bool  # "true" / "false" 문자열로 저장
-
     correctCount: int
-    
+
 
 class StudyReviewOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -135,4 +136,3 @@ class StudyReviewOut(BaseModel):
     feedback_summary: Optional[str] = None
     created_at: datetime
     last_wrong_at: Optional[datetime] = None
-

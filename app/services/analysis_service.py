@@ -298,7 +298,6 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
 
         expected_char = point.get("expected")
         correct_img_url = "default.png" # 기본 이미지
-        correct_video_url = None # 영상 URL은 기본적으로 없음
 
         if expected_char and '가' <= expected_char <= '힣':
             # 완성형 글자 그대로 조회
@@ -308,17 +307,22 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
 
             if char_data:
                 correct_img_url = char_data.image_url
-                correct_video_url = char_data.video_url
         
         point["correct_img_url"] = correct_img_url
-        point["correct_video_url"] = correct_video_url # 응답에 비디오 URL 추가
         point["wrong_text"] = point.get("actual", "")
+
+    # target_word 기준으로 영상 URL 조회
+    word_data = db.query(PronunciationData).filter(
+        PronunciationData.hangul_char == normalized_target
+    ).first()
+    common_video_url = word_data.video_url if word_data else None
         
     # ✅ 점수는 int 유지 (스키마와 일치)
     response_data = {
         "score": int(final_score),            # ★ "문자열" -> 정수로
         "my_text": normalized_user,
         "target_word": normalized_target,
+        "correct_video_url": common_video_url,  # 공통 비디오 URL
         "incorrect_points": processed_incorrect_points
     }
 
@@ -332,7 +336,8 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                 score=int(final_score),
 
                 target_word=normalized_target,
-                recognized_word=normalized_user  # 사용자가 발음한 단어
+                recognized_word=normalized_user,  # 사용자가 발음한 단어
+                video_url=common_video_url  # 공통 비디오 URL (있으면)
 
             )
             db.add(result_row)

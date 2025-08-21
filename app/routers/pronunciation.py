@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db 
 from app.schemas import PronunciationAnalysisResponse
-from app.services.analysis_service import analyze_user_pronunciation, transcribe_audio_for_minigame
+from app.services.analysis_service import analyze_user_pronunciation, transcribe_audio_for_minigame, analyze_user_sentence
 
 
 # API 라우터 객체를 생성합니다.
@@ -30,6 +30,19 @@ async def analyze_pronunciation_endpoint(
         print(f"발음 분석 중 심각한 오류 발생: {e}")
 
         raise HTTPException(status_code=500, detail=f"서버에서 오디오 파일을 처리하는 중 오류가 발생했습니다: {str(e)}")
+
+# --- 새롭게 추가된 부분: 문장 분석 엔드포인트 ---
+@router.post("/analyze_sentence", tags=["Pronunciation Analysis"])
+async def analyze_sentence_endpoint(
+    target_sentence: str = Form(...),
+    audio_file: UploadFile = File(...)
+):
+    try:
+        response_data = await analyze_user_sentence(target_sentence, audio_file)
+        return JSONResponse(content=response_data)
+    except Exception as e:
+        print(f"문장 분석 중 심각한 오류 발생: {e}")
+        raise HTTPException(status_code=500, detail=f"서버에서 오디오 파일을 처리하는 중 오류가 발생했습니다: {str(e)}")    
 
 @router.post("/transcribe_audio", tags=["Minigame"])
 async def transcribe_audio_for_minigame_endpoint(audio: UploadFile = File(...)):

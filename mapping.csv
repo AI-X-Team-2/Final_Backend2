@@ -151,26 +151,26 @@ hangul_char,video_filename
 훼,hwe.mp4
 햬,hyae.mp4
 
-바다,sea.mp4
-사다,buy.mp4
-나비,butterfly.mp4
-대문,gate.mp4
-라면,ramen.mp4
-도서,book.mp4
-배다,penetrate.mp4
-바나나,banana.mp4
-사다리,ladder.mp4
-다리미,iron.mp4
+바다,1.sea.mp4
+사다,2.buy.mp4
+나비,3.butterfly.mp4
+대문,4.gate.mp4
+라면,5.ramen.mp4
+도서,6.book.mp4
+배다,7.penetrate.mp4
+바나나,8.banana.mp4
+사다리,9.ladder.mp4
+다리미,10.iron.mp4
 
-자전,rotation.mp4
-자연,nature.mp4
-자격,qualification.mp4
-자유,freedom.mp4
-조각,piece.mp4
-과자,snack.mp4
-고기,meat.mp4
-자전거,bicycle.mp4
-고양이,cat.mp4
+자전,1.rotation.mp4
+자연,2.nature.mp4
+자격,3.qualification.mp4
+자유,4.freedom.mp4
+조각,5.piece.mp4
+과자,6.snack.mp4
+고기,7.meat.mp4
+자전거,8.bicycle.mp4
+고양이,9.cat.mp4
+자격증,10.license.mp4
 
-자격증,license.mp4
 

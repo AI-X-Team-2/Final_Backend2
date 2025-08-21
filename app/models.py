@@ -78,6 +78,7 @@ class StudyResult(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="학습 시작 시각")
     target_word = Column(String(255), nullable=False, comment="정답 단어")
     recognized_word = Column(String(255), nullable=False, comment="사용자가 발음한 단어")
+    video_url = Column(String(255), nullable=True, comment="사용자 발음 비디오 URL")
 
     __table_args__ = (
         CheckConstraint("score >= 0", name="check_score_non_negative"),
@@ -104,6 +105,7 @@ class StudyFeedback(Base):
     tongue_position_feedback  = Column(Text, nullable=True, comment="혀 위치 피드백")
     breathing_feedback        = Column(Text, nullable=True, comment="호흡 피드백")
     teaching_point            = Column(Text, nullable=True, comment="학습 포인트")
+    correct_img_url          = Column(String(255), nullable=True, comment="정답 이미지 URL")
 
     __table_args__ = (
         CheckConstraint("score >= 0", name="check_feedback_score_non_negative"),

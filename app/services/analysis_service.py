@@ -12,14 +12,17 @@ from pydub import AudioSegment
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from sqlalchemy import func
 import torch
 from faster_whisper import WhisperModel
 from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
-
+import re
 from sqlalchemy.orm import Session
-from app.models import PronunciationData
+
 # from app.core.config import IMAGE_GUIDE_MAP
+from app.models import PronunciationData, StudyResult, StudyFeedback, StudySession, StudyReview
+from app.utils.summarize import summarize_feedback_with_gpt
 
 
 # .env 파일에서 환경 변수를 로드합니다.
@@ -60,8 +63,21 @@ def _speech_to_text(audio_file_path: str):
             print(f"오디오 파일이 존재하지 않습니다: {audio_file_path}")
             return ""
 
-        segments, _ = whisper_model.transcribe(audio_file_path, language="ko")
-        transcription = "".join(segment.text for segment in segments).strip()
+        initial_prompt = None
+        vad_filter_flag = True
+        temperature = 0.0
+
+        segments, _ = whisper_model.transcribe(
+            audio_file_path,
+            language="ko",
+            vad_filter=vad_filter_flag,
+            initial_prompt=initial_prompt,
+            temperature=temperature,
+        )
+        
+        transcription = "".join(segment.text.strip() for segment in segments)
+        transcription = re.sub(r'[^\w]', '', transcription)
+        
         print(f"STT 결과: {transcription}")
         return transcription
     except Exception as e:
@@ -113,9 +129,48 @@ def _evaluate_pronunciation_with_llm(llm_input_pairs):
         return {"incorrect_points": []}
 
 
-# --- 발음 교정 기능 함수 ---
-async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session):
-    """사용자 발음을 분석하고 피드백을 반환합니다."""
+# --- ★새롭게 추가된 부분★: 문장 발음 평가 기능 ---
+def _evaluate_sentence_with_llm(target_text: str, user_transcript: str):
+    """
+    LLM을 사용하여 문장 발음의 평가, 교정, 총평 피드백을 생성합니다.
+    """
+    try:
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        system_prompt = f"""
+        당신은 한국어 발음 교육 전문가입니다. 사용자의 한국어 문장 발음을 듣고 아래의 지시에 따라 평가, 교정, 총평을 제공해주세요.
+        사용자가 발음한 문장: "{user_transcript}"
+        올바른 문장: "{target_text}"
+
+        # 출력 지침
+        1. 반드시 다음 JSON 형식으로만 응답해야 합니다.
+        {{
+          "sentence_feedback": {{
+            "evaluation": "전반적인 발음이 어떤지 간단히 평가. (2~3줄)",
+            "correction": "틀린 부분이나 어색한 발음이 있다면, 어떤 글자를 어떻게 교정해야 하는지 구체적인 방법을 알려주세요. (2~3줄)",
+            "general_feedback": "전반적인 총평과 다음 연습을 위한 조언을 해주세요. (2~3줄)"
+          }}
+        }}
+        """
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt}
+            ]
+        )
+        evaluation_result = json.loads(response.choices[0].message.content)
+        print("LLM 문장 피드백 생성 완료! 응답 데이터:", evaluation_result)
+        return evaluation_result
+    except Exception as e:
+        print(f"LLM 문장 평가 중 오류 발생: {e}")
+        return {"sentence_feedback": {"evaluation": "오류 발생", "correction": "오류 발생", "general_feedback": "오류 발생"}}
+
+
+async def analyze_user_sentence(target_sentence: str, audio_file):
+    """
+    사용자 문장 발음을 분석하고 피드백을 반환합니다.
+    (기존 단어 평가 로직과 분리됨)
+    """
     audio_content = await audio_file.read()
     audio_stream = io.BytesIO(audio_content)
     audio = AudioSegment.from_file(audio_stream)
@@ -127,6 +182,41 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
     clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    cleaned_audio_path = os.path.join(PRONUNCIATION_AUDIO_DIR, f"sentence_cleaned_{timestamp}.wav")
+    sf.write(cleaned_audio_path, clean_audio_data, sample_rate)
+    
+    user_transcript = _speech_to_text(cleaned_audio_path)
+    if not user_transcript: user_transcript = ""
+
+    normalized_target = target_sentence.strip()
+    
+    # LLM을 통해 피드백 생성
+    feedback = _evaluate_sentence_with_llm(normalized_target, user_transcript)
+
+    # 임시 파일 삭제
+    if os.path.exists(cleaned_audio_path):
+        os.remove(cleaned_audio_path)
+        
+    return {
+        "my_text": user_transcript,
+        "target_word": normalized_target,
+        "sentence_feedback": feedback["sentence_feedback"]
+    }
+
+# --- 발음 교정 기능 함수 ---
+async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session, session_id: str | None = None, is_review: bool = False,):
+    """사용자 발음을 분석하고 피드백을 반환합니다."""
+    audio_content = await audio_file.read()
+    audio_stream = io.BytesIO(audio_content)
+    audio = AudioSegment.from_file(audio_stream)
+    wav_stream = io.BytesIO()
+    audio.set_frame_rate(16000).set_channels(1).export(wav_stream, format="wav")
+    wav_stream.seek(0)
+    audio_data, sample_rate = sf.read(wav_stream)
+
+    clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     cleaned_audio_path = os.path.join(PRONUNCIATION_AUDIO_DIR, f"practice_cleaned_{timestamp}.wav")
     sf.write(cleaned_audio_path, clean_audio_data, sample_rate)
 
@@ -135,9 +225,6 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
 
     normalized_target = target_sentence.strip()
     normalized_user = user_transcript.strip()
-
-    if normalized_target == normalized_user:
-        return {"score": "100", "transcription": normalized_user, "incorrect_points": []}
 
     total_score = 0
     max_score = len(normalized_target) * 3
@@ -212,7 +299,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         expected_char = point.get("expected")
         correct_img_url = "default.png" # 기본 이미지
         correct_video_url = None # 영상 URL은 기본적으로 없음
-        
+
         if expected_char and '가' <= expected_char <= '힣':
             # 한글 음절일 경우 초성, 중성을 분리
             chosung, jungsung, _ = decompose_hangul(expected_char)
@@ -231,12 +318,114 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         point["correct_video_url"] = correct_video_url # 응답에 비디오 URL 추가
         point["wrong_text"] = point.get("actual", "")
         
+    # ✅ 점수는 int 유지 (스키마와 일치)
     response_data = {
-        "score": str(final_score),
+        "score": int(final_score),            # ★ "문자열" -> 정수로
         "my_text": normalized_user,
         "target_word": normalized_target,
         "incorrect_points": processed_incorrect_points
     }
+
+    # === ★ DB 저장 (옵션) ===
+    if session_id:
+        try:
+            # 1) 세션별 결과 1건 저장
+            result_row = StudyResult(
+                session_id=session_id,
+
+                score=int(final_score),
+
+                target_word=normalized_target,
+                recognized_word=normalized_user  # 사용자가 발음한 단어
+
+            )
+            db.add(result_row)
+            db.flush()  # result_id가 필요한 경우를 대비 (여기선 사용X)
+
+
+            if int(final_score) == 100:
+                session_obj = db.query(StudySession).filter(
+                    StudySession.session_id == session_id
+                ).first()
+                if session_obj:
+                    session_obj.correctCount = (session_obj.correctCount or 0) + 1
+                    db.add(session_obj)
+                
+
+            feedback_rows = []
+            for p in processed_incorrect_points:
+                # StudyFeedback 스키마상 score는 필수 → 전체 점수로 저장(단일 단어/문장 기준)
+                feedback_rows.append(
+                    StudyFeedback(
+
+                        result_id=result_row.result_id,
+
+                        score=int(final_score),
+                        mouth_feedback=p.get("mouth_feedback", "") or "",
+                        tongue_position_feedback=p.get("tongue_position_feedback", "") or "",
+                        breathing_feedback=p.get("breathing_feedback", "") or "",
+                        teaching_point=p.get("teaching_point", "") or ""
+                    )
+                )
+            if feedback_rows:
+                db.add_all(feedback_rows)
+
+                
+            session_obj = db.query(StudySession).filter(
+                StudySession.session_id == session_id
+            ).first()
+            if not session_obj:
+                raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+            # level(JSON) → int 하나 뽑기 (비어있으면 0)
+            level_value = 0
+            if isinstance(session_obj.level, list) and session_obj.level:
+                level_value = int(session_obj.level[0])
+
+            # GPT 요약 생성 (기존과 동일)
+            feedback_summary_text = await summarize_feedback_with_gpt(processed_incorrect_points)
+
+            if int(final_score) == 100:
+                db.query(StudyReview).filter(
+                    StudyReview.user_id == session_obj.user_id,
+                    StudyReview.target_word == normalized_target
+                ).delete(synchronize_session=False)
+
+
+            else:
+                # ✅ 100점이 아닐 때만 요약 생성 (비용 절감)
+                feedback_summary_text = await summarize_feedback_with_gpt(processed_incorrect_points)
+                
+                existing = db.query(StudyReview).filter(
+                    StudyReview.user_id == session_obj.user_id,
+                    StudyReview.target_word == normalized_target
+                ).first()
+
+                if existing:
+                    existing.recognized_word = normalized_user
+                    existing.level = [level_value]
+                    existing.score = int(final_score)
+                    existing.feedback_summary = feedback_summary_text
+                    existing.last_wrong_at = func.now()
+                    db.add(existing)
+                else:
+                    # 신규 생성
+                    db.add(StudyReview(
+                        user_id=session_obj.user_id,
+                        target_word=normalized_target,
+                        recognized_word=normalized_user,
+                        level=[level_value],
+                        score=int(final_score),
+                        feedback_summary=feedback_summary_text,
+                        last_wrong_at=func.now(),
+                    ))
+
+
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[DB 저장 오류] StudyResult/StudyFeedback 저장 중 에러: {e}")
+
     return response_data
 
 
@@ -258,11 +447,20 @@ async def transcribe_audio_for_minigame(audio):
             f.write(content)
         print(f"미니게임용 오디오 저장 완료: {temp_filepath}")
 
-        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko")
-        transcription = "".join(segment.text for segment in segments).strip()
+        segments, info = whisper_model.transcribe(temp_filepath, beam_size=5, language="ko", temperature=0.0, vad_filter=True)
+        transcription = "".join(segment.text.strip() for segment in segments)
+        transcription = re.sub(r'[^\w]', '', transcription)
+        
         print(f"미니게임 STT 결과: {transcription}")
         return {"my_text": transcription}
 
     except Exception as e:
         print(f"미니게임 STT 처리 중 오류 발생: {e}")
         raise HTTPException(status_code=500, detail=f"오디오 처리 중 서버 오류 발생: {str(e)}")
+    
+    finally:
+        # 이 부분이 추가된 부분입니다.
+        # 성공 여부와 관계없이 임시 파일을 삭제
+        if os.path.exists(temp_filepath):
+            os.remove(temp_filepath)
+            print(f"임시 오디오 파일 삭제 완료: {temp_filepath}")

@@ -2,9 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Chec
 from sqlalchemy.sql import func, expression
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import JSON as MYSQL_JSON, BIGINT as MYSQL_BIGINT, CHAR
-
 from sqlalchemy.ext.mutable import MutableList  
-
 from app.database import Base
 from app.utils.utils import generate_code
 
@@ -18,7 +16,6 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False)
     email    = Column(String(100), unique=True, nullable=False)
     password = Column(String(255), nullable=False)
-
     
     max_level = Column(
         MutableList.as_mutable(MYSQL_JSON),   # ✅ 변경
@@ -26,13 +23,6 @@ class User(Base):
         default=lambda: [1],
     )
 
-
-    # ❌ server_default 제거, ✅ ORM 기본값 사용
-    max_level = Column(
-        MYSQL_JSON,
-        nullable=False,
-        default=lambda: [1],   # INSERT 시 SQLAlchemy가 자동으로 [1] 넣어줌
-    )
 
 # =========================
 # 발음 가이드(참고)
@@ -59,7 +49,7 @@ class StudySession(Base):
     status         = Column(String(20), nullable=False, server_default="in_progress")
     created_at     = Column(DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
     completed_at   = Column(DateTime(timezone=True), nullable=True)
-
+    
     level = Column(
         MutableList.as_mutable(MYSQL_JSON),   # ✅ 변경
         nullable=False,
@@ -71,19 +61,9 @@ class StudySession(Base):
     isPassed = Column(Boolean, nullable=False, server_default=expression.false(), comment="통과 여부")
     correctCount = Column(Integer, nullable=True, default=0, comment="정답 개수")
 
-
     __table_args__ = (
         CheckConstraint("total_words >= 0", name="ck_session_total_words_non_negative"),
     )
-
-
-    feedbacks = relationship(
-        "StudyFeedback",
-        back_populates="session",
-        cascade="all, delete-orphan",
-        passive_deletes=True
-    )
-
 
 # ================================
 # 학습 결과 (learning_results)
@@ -96,15 +76,12 @@ class StudyResult(Base):
                         nullable=False, comment="세션 ID")
     score      = Column(Integer, nullable=False, comment="해당 단어 점수")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="학습 시작 시각")
-
     target_word = Column(String(255), nullable=False, comment="정답 단어")
     recognized_word = Column(String(255), nullable=False, comment="사용자가 발음한 단어")
-
 
     __table_args__ = (
         CheckConstraint("score >= 0", name="check_score_non_negative"),
     )
-
     
     feedbacks = relationship(
         "StudyFeedback",
@@ -113,7 +90,6 @@ class StudyResult(Base):
         passive_deletes=True
     )
 
-
 # ================================
 # 학습 피드백 (learning_feedbacks)
 # ================================
@@ -121,10 +97,8 @@ class StudyFeedback(Base):
     __tablename__ = "study_feedbacks"
 
     id         = Column(MYSQL_BIGINT(unsigned=True), primary_key=True, autoincrement=True, comment="피드백 고유 ID")
-
     result_id  = Column(MYSQL_BIGINT(unsigned=True), ForeignKey("study_results.result_id", ondelete="CASCADE"),
                         nullable=False, comment="result ID")
-
     score      = Column(Integer, nullable=False, comment="채점 점수")
     mouth_feedback            = Column(Text, nullable=True, comment="입 모양 피드백")
     tongue_position_feedback  = Column(Text, nullable=True, comment="혀 위치 피드백")
@@ -134,7 +108,6 @@ class StudyFeedback(Base):
     __table_args__ = (
         CheckConstraint("score >= 0", name="check_feedback_score_non_negative"),
     )
-
 
     result = relationship("StudyResult", back_populates="feedbacks")
 
@@ -170,4 +143,3 @@ class StudyReview(Base):
     )
 
     user = relationship("User", backref="reviews")
-

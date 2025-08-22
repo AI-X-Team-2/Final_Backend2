@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from app.database import Base, engine
 
 # 라우터 임포트
-from app.routers import users, results, pronunciation, progress, sessions, reviews, video
+from app.routers import users, results, pronunciation, progress, sessions, reviews, video, leaderboard
 
 # .env 파일에서 환경 변수를 로드합니다.
 load_dotenv()
@@ -44,6 +44,7 @@ app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["Study Sessions"])
 app.include_router(reviews.router, prefix="/api/reviews", tags=["Reviews"])
 app.include_router(video.router, prefix="/api", tags=["Video Processing"])
+app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["Leaderboard"])
 
 # 정적 파일(이미지)을 서빙할 경로를 마운트합니다.
 app.mount("/static/images", StaticFiles(directory="static/images"), name="static_images")

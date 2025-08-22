@@ -84,20 +84,23 @@ class PronunciationAnalysisResponse(BaseModel):
     score: int
     my_text: str
     target_word: str
+    video_url: Optional[str] = None  # 공통 비디오 URL
     incorrect_points: List[AnalysisPoint]
 
 # =========================
 # 단계 응답 스키마
 # =========================
 class ProgressOut(BaseModel):
+    username: str
+    email: EmailStr
     max_level: List[int] = Field(default_factory=lambda: [1])   # ✅ 항상 [1] 기본값
 
 # =========================
 # 학습 세션 생성 스키마
 # =========================
 class PracticeSessionCreate(BaseModel):
-    mode: Literal["daily", "basic"]
-    level: int = Field(0, ge=0, description="프론트는 단일 정수로 보냄. 서버가 [level]로 저장")
+    mode: Literal["daily", "basic", "practice", "review"]
+    level: list[int] = Field(default_factory=lambda: [0])
     total_words: int = Field(default=0, ge=0, description="총 단어 수 (기본값: 0, 음수 불가)")
 
 class PracticeSessionCreateResponse(BaseModel):
@@ -119,3 +122,19 @@ class StudySessionOut(BaseModel):
     total_words: int
     level: list[int]
     isPassed: bool  # "true" / "false" 문자열로 저장
+    correctCount: int
+
+
+class StudyReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    review_id: str
+    user_id: int
+    target_word: str
+    recognized_word: str
+    level: List[int]
+    score: Optional[int] = None
+    feedback_summary: Optional[str] = None
+    created_at: datetime
+    last_wrong_at: Optional[datetime] = None
+    

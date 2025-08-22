@@ -11,16 +11,18 @@ import soundfile as sf
 from pydub import AudioSegment
 from openai import OpenAI
 from dotenv import load_dotenv
-import re
+
+from sqlalchemy import func
 import torch
 from faster_whisper import WhisperModel
 from fastapi import HTTPException
 from app.utils.hangul import decompose_hangul
-
+import re
 from sqlalchemy.orm import Session
 
-from app.models import PronunciationData, StudyResult, StudyFeedback
 # from app.core.config import IMAGE_GUIDE_MAP
+from app.models import PronunciationData, StudyResult, StudyFeedback, StudySession, StudyReview
+from app.utils.summarize import summarize_feedback_with_gpt
 
 
 # .env 파일에서 환경 변수를 로드합니다.
@@ -201,9 +203,8 @@ async def analyze_user_sentence(target_sentence: str, audio_file):
         "sentence_feedback": feedback["sentence_feedback"]
     }
 
-
 # --- 발음 교정 기능 함수 ---
-async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session, session_id: str | None = None):
+async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Session, session_id: str | None = None, is_review: bool = False,):
     """사용자 발음을 분석하고 피드백을 반환합니다."""
     audio_content = await audio_file.read()
     audio_stream = io.BytesIO(audio_content)
@@ -212,6 +213,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
     audio.set_frame_rate(16000).set_channels(1).export(wav_stream, format="wav")
     wav_stream.seek(0)
     audio_data, sample_rate = sf.read(wav_stream)
+
     clean_audio_data = _reduce_noise(audio_data, sample_rate) if np.any(audio_data) else audio_data
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -223,9 +225,6 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
 
     normalized_target = target_sentence.strip()
     normalized_user = user_transcript.strip()
-
-    if normalized_target == normalized_user:
-        return {"score": "100", "transcription": normalized_user, "incorrect_points": []}
 
     total_score = 0
     max_score = len(normalized_target) * 3
@@ -319,7 +318,7 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         point["correct_video_url"] = correct_video_url # 응답에 비디오 URL 추가
         point["wrong_text"] = point.get("actual", "")
         
-    # 점수는 int 유지 (스키마와 일치)
+    # ✅ 점수는 int 유지 (스키마와 일치)
     response_data = {
         "score": int(final_score),            # ★ "문자열" -> 정수로
         "my_text": normalized_user,
@@ -327,24 +326,40 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
         "incorrect_points": processed_incorrect_points
     }
 
-    # === DB 저장 (옵션) ===
+    # === ★ DB 저장 (옵션) ===
     if session_id:
         try:
             # 1) 세션별 결과 1건 저장
             result_row = StudyResult(
                 session_id=session_id,
-                score=int(final_score)
+
+                score=int(final_score),
+
+                target_word=normalized_target,
+                recognized_word=normalized_user  # 사용자가 발음한 단어
+
             )
             db.add(result_row)
             db.flush()  # result_id가 필요한 경우를 대비 (여기선 사용X)
 
-            # 2) 각 오탐 포인트 → StudyFeedback 저장
+
+            if int(final_score) == 100:
+                session_obj = db.query(StudySession).filter(
+                    StudySession.session_id == session_id
+                ).first()
+                if session_obj:
+                    session_obj.correctCount = (session_obj.correctCount or 0) + 1
+                    db.add(session_obj)
+                
+
             feedback_rows = []
             for p in processed_incorrect_points:
                 # StudyFeedback 스키마상 score는 필수 → 전체 점수로 저장(단일 단어/문장 기준)
                 feedback_rows.append(
                     StudyFeedback(
-                        session_id=session_id,
+
+                        result_id=result_row.result_id,
+
                         score=int(final_score),
                         mouth_feedback=p.get("mouth_feedback", "") or "",
                         tongue_position_feedback=p.get("tongue_position_feedback", "") or "",
@@ -354,6 +369,57 @@ async def analyze_user_pronunciation(target_sentence: str, audio_file, db: Sessi
                 )
             if feedback_rows:
                 db.add_all(feedback_rows)
+
+                
+            session_obj = db.query(StudySession).filter(
+                StudySession.session_id == session_id
+            ).first()
+            if not session_obj:
+                raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+            # level(JSON) → int 하나 뽑기 (비어있으면 0)
+            level_value = 0
+            if isinstance(session_obj.level, list) and session_obj.level:
+                level_value = int(session_obj.level[0])
+
+            # GPT 요약 생성 (기존과 동일)
+            feedback_summary_text = await summarize_feedback_with_gpt(processed_incorrect_points)
+
+            if int(final_score) == 100:
+                db.query(StudyReview).filter(
+                    StudyReview.user_id == session_obj.user_id,
+                    StudyReview.target_word == normalized_target
+                ).delete(synchronize_session=False)
+
+
+            else:
+                # ✅ 100점이 아닐 때만 요약 생성 (비용 절감)
+                feedback_summary_text = await summarize_feedback_with_gpt(processed_incorrect_points)
+                
+                existing = db.query(StudyReview).filter(
+                    StudyReview.user_id == session_obj.user_id,
+                    StudyReview.target_word == normalized_target
+                ).first()
+
+                if existing:
+                    existing.recognized_word = normalized_user
+                    existing.level = [level_value]
+                    existing.score = int(final_score)
+                    existing.feedback_summary = feedback_summary_text
+                    existing.last_wrong_at = func.now()
+                    db.add(existing)
+                else:
+                    # 신규 생성
+                    db.add(StudyReview(
+                        user_id=session_obj.user_id,
+                        target_word=normalized_target,
+                        recognized_word=normalized_user,
+                        level=[level_value],
+                        score=int(final_score),
+                        feedback_summary=feedback_summary_text,
+                        last_wrong_at=func.now(),
+                    ))
+
 
             db.commit()
         except Exception as e:

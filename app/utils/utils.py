@@ -10,4 +10,6 @@ def is_blank(field: str) -> bool:
     return not field or field.strip() == ""
 
 def generate_code(length: int = 8) -> str:
-    return ''.join(secrets.choice(ALPHABET62) for _ in range(length))
+    code = ''.join(secrets.choice(ALPHABET62) for _ in range(length))
+    print(f"[DEBUG] generate_code(): 생성된 세션 ID = {code}")  # ✅ 디버깅 출력
+    return code

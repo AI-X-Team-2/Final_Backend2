@@ -146,7 +146,6 @@ class LeaderboardOut(BaseModel):
     id: int
     username: str
     points: int
-    rank: int
     created_at: datetime
 
     class Config:

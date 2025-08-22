@@ -146,3 +146,19 @@ class StudyReview(Base):
 
     user = relationship("User", backref="reviews")
 
+# ================================
+# 미니게임 리더보드 (mini_game_leaderboard)
+# ================================
+class MiniGameLeaderboard(Base):
+    __tablename__ = "mini_game_leaderboard"
+
+    id = Column(MYSQL_BIGINT(unsigned=True), primary_key=True, autoincrement=True, comment="리더보드 레코드 ID")
+    username = Column(String(50), nullable=False, index=True, comment="플레이어 닉네임(스냅샷)")
+    points = Column(Integer, nullable=False, default=0, comment="획득 포인트")
+
+    # 기록 시각(UTC 권장, 표시 시 KST 변환)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="기록 시각")
+
+    __table_args__ = (
+        CheckConstraint("points >= 0", name="ck_leaderboard_points_non_negative"),
+    )

@@ -138,3 +138,26 @@ class StudyReviewOut(BaseModel):
     created_at: datetime
     last_wrong_at: Optional[datetime] = None
     
+
+class LeaderboardCreate(BaseModel):
+    points: int = Field(ge=0)
+
+class LeaderboardOut(BaseModel):
+    id: int
+    username: str
+    points: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+        
+class LeaderboardMyRankOut(BaseModel):
+    username: str
+    points: int
+    rank: int
+    total_players: int
+    created_at: datetime
+        
+class LeaderboardSummaryOut(BaseModel):
+    leaderboard: List[LeaderboardOut]
+    my_rank: Optional[LeaderboardMyRankOut]  # 기록 없으면 null

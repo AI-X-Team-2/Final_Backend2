@@ -1,5 +1,6 @@
 # routers/leaderboard.py
 from fastapi import APIRouter, Depends, status, Query
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -41,7 +42,6 @@ def create_leaderboard_entry(
 
 @router.get("/leaderboard", response_model=LeaderboardSummaryOut)
 def leaderboard_summary(
-    limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -52,6 +52,29 @@ def leaderboard_summary(
           .limit(TOP_N)
           .all()
     )
+    
+    # 각 항목 rank 계산 (points DESC, tie: created_at ASC)
+    leaderboard_with_rank: list[dict] = []
+    for row in top_rows:
+        higher_or_earlier = (
+            db.query(MiniGameLeaderboard)
+              .filter(
+                  (MiniGameLeaderboard.points > row.points) |
+                  and_(
+                      MiniGameLeaderboard.points == row.points,
+                      MiniGameLeaderboard.created_at < row.created_at
+                  )
+              )
+              .count()
+        )
+        
+        leaderboard_with_rank.append({
+            "id": row.id,
+            "username": row.username,
+            "points": row.points,
+            "created_at": row.created_at,
+            "rank": higher_or_earlier + 1,
+        })
 
     # 내 기록 (없을 수도 있음)
     me = (

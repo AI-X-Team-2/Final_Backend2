@@ -44,12 +44,14 @@ print(f"Faster Whisper 모델 로드를 시작합니다. 모델 크기: '{MODEL_
 whisper_model = WhisperModel(MODEL_SIZE, device=device, compute_type=compute_type)
 print("Faster Whisper 모델 로드 완료!")
 
+
 # --- 폴더 분리 및 생성 ---
 # 음성 파일 저장 폴더를 정의하고 생성합니다.
 PRONUNCIATION_AUDIO_DIR = "pronunciation_audio_files"
 MINIGAME_AUDIO_DIR = "minigame_audio_files"
 os.makedirs(PRONUNCIATION_AUDIO_DIR, exist_ok=True)
 os.makedirs(MINIGAME_AUDIO_DIR, exist_ok=True)
+
 
 
 def _reduce_noise(audio_data: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -68,16 +70,20 @@ def _speech_to_text(audio_file_path: str) -> str:
             print(f"오디오 파일이 존재하지 않습니다: {audio_file_path}")
             return ""
 
+        initial_prompt = None
+        vad_filter_flag = True
+        temperature = 0.0
+
         segments, _ = whisper_model.transcribe(
             audio_file_path,
             language="ko",
-            vad_filter=True,
-            initial_prompt=None,
-            temperature=0.0,
+            vad_filter=vad_filter_flag,
+            initial_prompt=initial_prompt,
+            temperature=temperature,
         )
 
         transcription = "".join(segment.text.strip() for segment in segments)
-        transcription = re.sub(r"[^\w]", "", transcription)
+        transcription = re.sub(r'[^\w]', '', transcription)
         print(f"STT 결과: {transcription}")
         return transcription
     except Exception as e:

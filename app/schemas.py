@@ -84,7 +84,8 @@ class PronunciationAnalysisResponse(BaseModel):
     score: int
     my_text: str
     target_word: str
-    video_url: Optional[str] = None  # 공통 비디오 URL
+    # video_url: Optional[str] = None  # 공통 비디오 URL
+    correct_video_url: Optional[str] = None
     incorrect_points: List[AnalysisPoint]
 
 # =========================

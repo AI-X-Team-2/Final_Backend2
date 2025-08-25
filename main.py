@@ -22,10 +22,10 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="유음 database")
 
 origins = [
-    "http://3.35.0.140/5173",  # Vite dev server
+    "http://3.35.0.140",  # Vite dev server
     "http://3.35.0.140/5173", # 필요하면 이것도 추가
     "http://3.35.0.140/5174",  # 현재 프론트엔드 주소 추가!
-    "http://3.35.0.140/5174", # 이것도 함께 추가
+    "http://3.35.0.140", # 이것도 함께 추가
     
 ]
 

@@ -29,7 +29,7 @@ origins = [
     "http://3.35.0.140/5173", 
     "http://3.35.0.140/5174", 
     "http://3.35.0.140", 
-    "https://youum.kro.kr/api/reviews"
+    "https://youum.kro.kr"
     
 ]
 

@@ -29,7 +29,8 @@ origins = [
     "http://3.37.209.154/5173", 
     "http://3.37.209.154/5174", 
     "http://3.37.209.154", 
-    "https://youum.kro.kr"
+    "https://youum.kro.kr",
+    "https://final-front-sandy-eight.vercel.app",
     
 ]
 

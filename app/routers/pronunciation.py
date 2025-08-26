@@ -13,7 +13,7 @@ from app.services.analysis_service import analyze_user_pronunciation, transcribe
 # API 라우터 객체를 생성합니다.
 router = APIRouter()
 
-@router.post("/analyze", response_model=PronunciationAnalysisResponse, tags=["Pronunciation Analysis"])
+@router.post("/analyze", response_model=PronunciationAnalysisResponse)
 async def analyze_pronunciation_endpoint(
     target_sentence: str = Form(...),
     audio_file: UploadFile = File(...),
@@ -54,7 +54,7 @@ async def analyze_pronunciation_endpoint(
         )
 
 # --- 새롭게 추가된 부분: 문장 분석 엔드포인트 ---
-@router.post("/analyze_sentence", tags=["Pronunciation Analysis"])
+@router.post("/analyze_sentence")
 async def analyze_sentence_endpoint(
     target_sentence: str = Form(...),
     audio_file: UploadFile = File(...)
@@ -66,7 +66,7 @@ async def analyze_sentence_endpoint(
         print(f"문장 분석 중 심각한 오류 발생: {e}")
         raise HTTPException(status_code=500, detail=f"서버에서 오디오 파일을 처리하는 중 오류가 발생했습니다: {str(e)}")    
 
-@router.post("/transcribe_audio", tags=["Minigame"])
+@router.post("/transcribe_audio")
 async def transcribe_audio_for_minigame_endpoint(audio: UploadFile = File(...)):
     """
     오디오 파일을 받아 텍스트로 변환하는 간단한 STT 기능입니다.

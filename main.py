@@ -25,10 +25,10 @@ origins = [
     "http://localhost:5173",  # Vite dev server
     "http://localhost:5174",  # 현재 프론트엔드 주소 추가
   
-    "http://3.35.0.140/", 
-    "http://3.35.0.140/5173", 
-    "http://3.35.0.140/5174", 
-    "http://3.35.0.140", 
+    "http://3.37.209.154/", 
+    "http://3.37.209.154/5173", 
+    "http://3.37.209.154/5174", 
+    "http://3.37.209.154", 
     "https://youum.kro.kr"
     
 ]
@@ -42,7 +42,7 @@ app.add_middleware(
 )
 
 # API 라우터들을 메인 앱에 포함시킵니다.
-app.include_router(pronunciation.router)
+app.include_router(pronunciation.router, prefix="/api/pronunciation", tags=["pronunciation"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(results.router, prefix="/api/results", tags=["Results"])
 app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])

@@ -25,12 +25,10 @@ origins = [
     "http://localhost:5173",  # Vite dev server
     "http://localhost:5174",  # 현재 프론트엔드 주소 추가
   
-    "http://3.37.209.154/", 
-    "http://3.37.209.154/5173", 
-    "http://3.37.209.154/5174", 
-    "http://3.37.209.154", 
     "https://youum.kro.kr",
-    "https://final-front-sandy-eight.vercel.app",
+    
+    "https://final-front-dusky.vercel.app",
+    "https://final-front-mekr3igui-seolhyunwoos-projects.vercel.app",
     
 ]
 
@@ -49,7 +47,7 @@ app.include_router(results.router, prefix="/api/results", tags=["Results"])
 app.include_router(progress.router, prefix="/api/progress", tags=["Progress"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["Study Sessions"])
 app.include_router(reviews.router, prefix="/api/reviews", tags=["Reviews"])
-app.include_router(video.router, prefix="/api", tags=["Video Processing"])
+app.include_router(video.router, prefix="/api/video", tags=["Video Processing"])
 app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["Leaderboard"])
 
 # 정적 파일(이미지)을 서빙할 경로를 마운트합니다.
